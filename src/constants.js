@@ -46,9 +46,9 @@ export const PLAN_REFRESH = HOUR;
 /** An hour DB has no plan for yet (404) is asked again after this long. */
 export const PLAN_EMPTY_RETRY = 15 * MINUTE;
 /** At most this many planned hours kept per station. */
-export const MAX_PLAN_HOURS = 6;
-/** The hour before is read too: a train planned then and late still leaves. */
-export const LOOKBACK_MINUTES = 60;
+export const MAX_PLAN_HOURS = 7;
+/** The two hours before are read too: a train planned then and late still leaves. */
+export const LOOKBACK_MINUTES = 120;
 /** The boards are published again every minute from what is held (no request). */
 export const TICK = MINUTE;
 

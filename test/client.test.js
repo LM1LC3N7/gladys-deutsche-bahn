@@ -96,9 +96,12 @@ test('an answer too large is cut before it is read whole', async () => {
   assert.equal((await big.client.changes('1').catch((e) => e)).code, 'too_large');
   let pulled = 0;
   const stream = new ReadableStream({
+    // 4 MiB at most: a mutant without the bound reads it all and fails
+    // quickly, never fills the RAM.
     pull(controller) {
       pulled += 1;
-      controller.enqueue(new Uint8Array(64 * 1024).fill(0x41));
+      if (pulled > 64) controller.close();
+      else controller.enqueue(new Uint8Array(64 * 1024).fill(0x41));
     },
   });
   const endless = make(

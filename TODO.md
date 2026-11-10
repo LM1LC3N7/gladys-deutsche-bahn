@@ -18,13 +18,17 @@
       say; the integration stays at 40).
 - [ ] What `/plan` answers for an hour without trains or too far ahead (404
       or an empty `<timetable/>`; both are read as an empty hour).
-- [ ] Whether `/fchg` lists every train with live tracking (with its `<dp>`)
-      or only the changed ones. Today a train absent from `/fchg` has no
-      delay published ("no live data"); a train listed without `ct` is on
-      time (0). If DB lists only changed trains, this hides on-time trains:
-      ask Louis before reading "absent" as "on time".
-- [ ] How far back DB still serves `/plan` (the hour before is read for the
-      late trains; a 404 there is an empty hour).
+- [x] Whether `/fchg` lists every tracked train or only the changed ones:
+      not decidable from the feed (spec Timetables 1.0.213: "all known
+      changes"; real dumps analysed in review r2). Decided by the
+      coordinator (r2): a train absent from a fresh `/fchg` is on time
+      (delay 0); "timetable only" only when `/fchg` is not fresh.
+- [ ] An empty `/fchg` (no `<s>`) for a station with many planned departures
+      may be a gateway failure served in 200: today read as "nothing
+      changed" (on time). A guard (e.g. 10 departures planned, empty
+      `/fchg` = not fresh) is to weigh against a quiet night station.
+- [ ] How far back DB still serves `/plan` (the two hours before are read
+      for the late trains; a 404 there is an empty hour).
 - [ ] The size of `/fchg` for the biggest stations (limit: 4 MiB) and of a
       `/plan` hour (2 MiB).
 - [ ] How `/station/<name>` matches (prefix, part of the name) and whether
@@ -66,7 +70,8 @@
   `/station` first. Kept as 8 bits of a salted hash of both credentials.
 - **Unknown stays unknown**: no next departure leaves `next_in` and `delay`
   unpublished; no live data for 10 minutes (2.5 intervals) leaves `delay` and
-  `disrupted` unpublished; an incomplete timetable publishes nothing.
+  `disrupted` unpublished; an incomplete timetable publishes nothing. With a
+  fresh `/fchg`, a train it does not list is on time (DB's convention).
 - **Counter**: `disrupted` is `counter-sensor` / `integer` ("Counter
   (integer)" in the core: a count that goes up and down, as the bike
   counts of the transit siblings), the closest generic category.

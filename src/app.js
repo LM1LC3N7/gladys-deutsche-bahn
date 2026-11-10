@@ -827,8 +827,9 @@ export class DbApp {
       slot.wait?.kind === 'server'
         ? Math.min(STATION_RETRY_MAX, slot.wait.delay * 2)
         : STATION_RETRY_MIN;
+    // What DB asks for is honoured, up to the longest pause (6 h).
     const delay = Math.min(
-      STATION_RETRY_MAX,
+      PAUSE_MAX,
       Math.max(doubled, finite(err.retryAfter) ? err.retryAfter : 0),
     );
     slot.wait = { kind: 'server', due: this.monotonic() + delay, delay };
@@ -1126,9 +1127,6 @@ export class DbApp {
           } else if (d.cancelled) {
             value = t('cancelled', lang);
             color = WIDGET_COLORS.DANGER;
-          } else if (!d.liveKnown) {
-            value = t('noLiveTrain', lang);
-            color = WIDGET_COLORS.NEUTRAL;
           } else if (delay > 0) {
             value = `+${delay} min`;
             color =

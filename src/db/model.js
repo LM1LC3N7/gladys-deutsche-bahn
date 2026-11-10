@@ -148,9 +148,6 @@ export function departuresOf(plans, changes) {
       // A changed time that is unreadable leaves the planned one.
       time: changedTime ?? planned,
       changed: changedTime !== undefined,
-      // DB said something live about this departure (a stop of /fchg with its
-      // <dp>): only then is "no changed time" a delay of 0.
-      liveKnown: Boolean(c),
       cancelled: status === 'c',
       added: status === 'a',
       line: lineOf(tl, { l: pick(c?.l, dp?.l) }),

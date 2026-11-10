@@ -13,7 +13,6 @@ const TEXTS = {
   cancelled: { en: 'cancelled', fr: 'supprimé' },
   onTime: { en: 'on time', fr: "à l'heure" },
   noLive: { en: 'timetable only', fr: 'horaire prévu seulement' },
-  noLiveTrain: { en: 'no live data', fr: 'pas de direct' },
   attribution: { en: 'Deutsche Bahn, CC BY 4.0', fr: 'Deutsche Bahn, CC BY 4.0' },
   none: { en: 'No departure in the next {minutes} min', fr: 'Aucun départ dans les {minutes} min' },
 

@@ -132,7 +132,7 @@ test('board: window, filters, next that runs, delay, disrupted from the threshol
   assert.ok(board.rows.every((d) => d.planned <= NOW + 60 * MINUTE));
   const ice = buildBoard(deps, { ...base, filter: { lines: ['ICE'] } });
   assert.equal(ice.next.line, 'ICE 514');
-  assert.equal(ice.delay, undefined, 'the ICE is not in /fchg: its delay is unknown');
+  assert.equal(ice.delay, 0, 'absent from a fresh /fchg: no change reported, on time');
   assert.equal(
     buildBoard(deps, { ...base, filter: { lines: ['S12'] } }).next,
     undefined,
@@ -153,7 +153,7 @@ test('board: window, filters, next that runs, delay, disrupted from the threshol
   assert.equal(empty.next, undefined);
   assert.equal(empty.nextIn, undefined);
   assert.equal(empty.delay, undefined);
-  assert.equal(empty.disrupted, undefined, 'nothing live in the window: no count');
+  assert.equal(empty.disrupted, 0, 'a fresh /fchg and nothing in the window: 0');
 });
 
 test('board: filters on categories and lines without spaces', () => {

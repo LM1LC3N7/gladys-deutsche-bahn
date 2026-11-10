@@ -29,6 +29,7 @@ test('first round: station resolved, two planned hours, the live changes, four s
     s.db.calls.map((c) => c.path),
     [
       '/station/Köln Hbf',
+      '/plan/8000207/261110/12',
       '/plan/8000207/261110/13',
       '/plan/8000207/261110/14',
       '/plan/8000207/261110/15',
@@ -61,12 +62,12 @@ test('the pace: an interval start to start, the plan read once an hour, never so
   assert.equal(fchg(s), 1, 'not before the interval');
   await s.advance(20 * SECOND);
   assert.equal(fchg(s), 2);
-  assert.equal(s.db.count('/plan/'), 3, 'the planned hours are kept');
+  assert.equal(s.db.count('/plan/'), 4, 'the planned hours are kept');
   assert.equal(s.db.count('/station/'), 1, 'the station is resolved once');
   await s.advance(60 * MINUTE);
   assert.equal(fchg(s), 32);
   // 15:02 -> 16:02: hour 16 is new, 15 and 16 again after an hour.
-  assert.ok(s.db.count('/plan/') >= 4 && s.db.count('/plan/') <= 6, `${s.db.count('/plan/')}`);
+  assert.ok(s.db.count('/plan/') >= 5 && s.db.count('/plan/') <= 8, `${s.db.count('/plan/')}`);
   await s.app.stop();
 });
 
@@ -414,7 +415,7 @@ test('no departure in the window: the text says so, no minutes and no delay publ
   assert.equal(s.last(F('next')), 'No departure in the next 60 min');
   assert.equal(s.states(F('next_in')).length, 0);
   assert.equal(s.states(F('delay')).length, 0);
-  assert.equal(s.states(F('disrupted')).length, 0, 'no live data for any departure: no count');
+  assert.equal(s.last(F('disrupted')), 0, 'a fresh /fchg: nothing disrupted is a real 0');
   await s.app.stop();
 });
 

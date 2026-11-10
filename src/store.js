@@ -43,14 +43,22 @@ export class FileStore {
     } catch {
       // A torn or foreign file: set aside as `.bad` (kept for a look), never
       // overwritten in place; when it cannot be moved, it is unreadable.
-      try {
-        await rename(this.path, `${this.path}.bad`);
-      } catch (err) {
-        throw new StoreUnreadable(err?.code ?? 'unparsable');
-      }
+      await this.setAside();
       return {};
     }
-    return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    if (data && typeof data === 'object' && !Array.isArray(data)) return data;
+    // Valid JSON but not ours (an array, a number): set aside like a torn file.
+    await this.setAside();
+    return {};
+  }
+
+  /** Moves the file to `.bad`; when it cannot be moved, it is unreadable. */
+  async setAside() {
+    try {
+      await rename(this.path, `${this.path}.bad`);
+    } catch (err) {
+      throw new StoreUnreadable(err?.code ?? 'unparsable');
+    }
   }
 
   /** Saves after the previous save (the last one always lands last). */

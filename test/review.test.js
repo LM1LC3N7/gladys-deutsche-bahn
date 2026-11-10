@@ -108,15 +108,21 @@ test('I3: a 404 for a later hour only is an empty hour', async () => {
   await s.app.stop();
 });
 
-test('I5: a train absent from /fchg has no delay: "no live data", nothing published as 0', async () => {
+test('I8: a train absent from a fresh /fchg is on time (delay 0); a stale /fchg tells nothing', async () => {
   const s = await setup({ config: { ...CONFIG, lines_1: 'ICE' } });
   await s.run();
-  assert.equal(s.last(F('next')), '14:20 ICE 514 → München Hbf, pl. 5, no live data');
-  assert.equal(s.states(F('delay')).length, 0);
-  assert.equal(s.states(F('disrupted')).length, 0);
+  assert.equal(s.last(F('next')), '14:20 ICE 514 → München Hbf, pl. 5, on time');
+  assert.equal(s.last(F('delay')), 0);
+  assert.equal(s.last(F('disrupted')), 0);
   assert.equal(s.last(F('next_in')), 17);
   const widget = s.app.getWidget({ settings: { station: DEVICE() } });
-  assert.equal(widget.components[1].items[0].value, 'no live data · pl. 5');
+  assert.equal(widget.components[1].items[0].value, 'on time · pl. 5');
+  // The live data goes stale: "timetable only", no delay published any more.
+  s.db.override = (path) => (path.startsWith('/fchg/') ? 'timeout' : undefined);
+  const delays = s.states(F('delay')).length;
+  await s.advance(20 * MINUTE);
+  assert.match(s.last(F('next')), /timetable only$/);
+  assert.equal(s.states(F('delay')).length, delays);
   await s.app.stop();
 });
 
@@ -223,6 +229,7 @@ test('m4: at midnight, the hours of the next German day are asked', async () => 
   await s.run();
   const plans = s.db.calls.filter((c) => c.path.startsWith('/plan/')).map((c) => c.path);
   assert.deepEqual(plans, [
+    '/plan/8000207/261110/21',
     '/plan/8000207/261110/22',
     '/plan/8000207/261110/23',
     '/plan/8000207/261111/00',
@@ -309,5 +316,40 @@ test('I6: /data read late and its last round long ago: the round comes at once, 
   store.unreadable = false;
   await s.advance(20 * SECOND);
   assert.equal(fchg(s), 1);
+  await s.app.stop();
+});
+
+test('n1: the Retry-After of a 5xx on one station is honoured beyond 30 min (6 h at most)', async () => {
+  const s = await setup({ config: { ...CONFIG, station_2: 'FF' } });
+  s.db.override = (path) =>
+    path === '/fchg/8000105'
+      ? new Response('', { status: 503, headers: { 'retry-after': '3600' } })
+      : undefined;
+  await s.run(30 * SECOND);
+  await s.advance(59 * MINUTE);
+  assert.equal(s.db.count('/fchg/8000105'), 1, 'one try in the hour asked');
+  await s.advance(3 * MINUTE);
+  assert.equal(s.db.count('/fchg/8000105'), 2);
+  await s.app.stop();
+});
+
+test('n3: valid JSON that is not an object is set aside as .bad too', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'dbahn-store-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const store = new FileStore({ dir });
+  await writeFile(join(dir, 'deutsche-bahn.json'), '[1, 2]');
+  assert.deepEqual(await store.load(), {});
+  assert.equal(await readFile(join(dir, 'deutsche-bahn.json.bad'), 'utf8'), '[1, 2]');
+});
+
+test('n2: a train planned two hours before and late still shows', async () => {
+  const s = await setup({ config: { ...CONFIG, lines_1: 'RE 7' } });
+  const extra =
+    '<s id="very-late"><tl c="RE" n="7777"/><dp pt="2611101250" pp="6" l="7" ppth="Krefeld Hbf"/></s>';
+  s.db.override = (path) =>
+    path === '/plan/8000207/261110/12' ? xml(planXml(EVA, '261110', '12', { extra })) : undefined;
+  s.db.changes[EVA] = [...defaultChanges(), '<s id="very-late"><dp ct="2611101410"/></s>'];
+  await s.run();
+  assert.equal(s.last(F('next')), '12:50 RE 7 → Krefeld Hbf, pl. 6, +80 min');
   await s.app.stop();
 });

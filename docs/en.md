@@ -52,12 +52,18 @@ name `DB <station>`, with the filters in brackets). Features, all read-only:
 | --------------------------- | ------------------------------------------------------------------------------ |
 | Next departure              | text, e.g. `14:05 RE 5 → Koblenz Hbf, pl. 4 instead of 3, +4 min`              |
 | Next departure in           | minutes until the next departure that runs (with its delay)                    |
-| Delay of the next departure | minutes, 0 when on time (only when DB gives live data for that train)          |
+| Delay of the next departure | minutes, 0 when on time (live data only)                                       |
 | Disrupted departures        | departures of the window cancelled or late from the threshold (live data only) |
 
 The time shown is the planned time, local time of Germany. A cancelled train
 is not "the next departure": the next one that runs is. A train planned in the
-hour before and still waiting (late) is shown too.
+two hours before and still waiting (late) is shown too; one later than that is
+missed.
+
+A train for which DB reports no change is on time: that is how DB's live data
+works (`/fchg` lists the changes). DB does not guarantee that every tracked
+train is in it, and its data does not tell a train on time from a train it
+does not track: both show "on time".
 
 The values are published again every minute from what was read (no request):
 **Next departure in** counts down between two reads.
@@ -67,15 +73,14 @@ What is not known is not published (the last value stays; Gladys has no
 
 - no departure in the window: the text says so, **Next departure in** and
   **Delay** are not updated (never a 0 for "none");
-- a train DB gives no live data for: the text says "no live data", its delay
-  is not updated; **Disrupted departures** is counted only when DB gives live
-  data for at least one departure of the window;
 - live data of DB older than 10 minutes (2.5 intervals when longer): the text
   ends with "timetable only", delay and disruptions are not updated;
 - no timetable for the current hour nor the next ones (DB answers 404), or a
   timetable hour missing: nothing is published, the status says so;
 - the hour repeated by the autumn change of time (02:00 to 03:00 winter time):
   the times are ambiguous, nothing is published until 03:00.
+  In the hour after it, a train of the repeated hour still late is shown
+  with a delay one hour off (one hour a year).
 
 ## 4. Dashboard
 
@@ -87,7 +92,7 @@ already read: opening it sends no request to DB.
 ## 5. How it reads DB, and its limits
 
 - Every interval, for each station: the live changes (`/fchg`), one request;
-  the timetable of each hour of the window and of the hour before (`/plan`)
+  the timetable of each hour of the window and of the two hours before (`/plan`)
   once an hour; the station itself once (kept across restarts).
 - At most one request at a time, 1.5 s apart (40 a minute at most, the free
   plan allows 60). A restart, a reconnection, a save of the form or the test
@@ -97,8 +102,9 @@ already read: opening it sends no request to DB.
 - **HTTP 429**, a 5xx on the station request, or a 5xx on every station of a
   round: every request waits (Retry-After when DB gives it, otherwise
   1 minute doubling up to 6 hours), kept across restarts. A 5xx on the
-  timetable of one station only: that station waits (1 minute doubling up to
-  30 minutes), the others are read as usual.
+  timetable of one station only: that station waits (Retry-After when DB gives
+  it, up to 6 hours; otherwise 1 minute doubling up to 30 minutes), the others
+  are read as usual.
 - **HTTP 401/403 on the station request**: the credentials are refused. The
   integration stops and does not try them again by itself, even after a
   restart; enter other credentials or press **Test the credentials** (a

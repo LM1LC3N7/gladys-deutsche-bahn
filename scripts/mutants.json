@@ -198,10 +198,10 @@
     "to": "if (status === 401)"
   },
   {
-    "name": "no delay without live data (stale)",
+    "name": "a stale /fchg gives no delay",
     "file": "src/board.js",
-    "from": "delay: next && live && next.liveKnown ? delayOf(next) : undefined,",
-    "to": "delay: next && next.liveKnown ? delayOf(next) : undefined,"
+    "from": "delay: next && live ? delayOf(next) : undefined,",
+    "to": "delay: next ? delayOf(next) : undefined,"
   },
   {
     "name": "a cancelled train is never the next one",
@@ -288,22 +288,22 @@
     "to": "? STATION_RETRY_MIN"
   },
   {
-    "name": "I5: no delay for a train without live data",
+    "name": "I8: a train absent from a fresh /fchg is on time (delay published)",
     "file": "src/board.js",
-    "from": "delay: next && live && next.liveKnown ? delayOf(next) : undefined,",
-    "to": "delay: next && live ? delayOf(next) : undefined,"
+    "from": "delay: next && live ? delayOf(next) : undefined,",
+    "to": "delay: next && live && next.changed ? delayOf(next) : undefined,"
   },
   {
-    "name": "I5: no count without live data in the window",
+    "name": "I8: a stale /fchg gives no count",
     "file": "src/board.js",
-    "from": "disrupted: counted ? Math.min(MAX_COUNT, disrupted) : undefined,",
-    "to": "disrupted: live ? Math.min(MAX_COUNT, disrupted) : undefined,"
+    "from": "disrupted: live ? Math.min(MAX_COUNT, disrupted) : undefined,",
+    "to": "disrupted: Math.min(MAX_COUNT, disrupted),"
   },
   {
-    "name": "I5: the text says no live data for the train",
+    "name": "I8: a stale /fchg says timetable only",
     "file": "src/devices.js",
-    "from": "  } else if (!departure.liveKnown) {",
-    "to": "  } else if (false) {"
+    "from": "  if (!live) {\n    parts.push(t('noLive', language));",
+    "to": "  if (false) {\n    parts.push(t('noLive', language));"
   },
   {
     "name": "I6: /data unread: a whole interval first",
@@ -394,5 +394,23 @@
     "file": "src/app.js",
     "from": "count: Math.min(pause.count, 16),",
     "to": "count: pause.count,"
+  },
+  {
+    "name": "n1: the Retry-After of a station 5xx is honoured beyond 30 min",
+    "file": "src/app.js",
+    "from": "      PAUSE_MAX,\n      Math.max(doubled,",
+    "to": "      STATION_RETRY_MAX,\n      Math.max(doubled,"
+  },
+  {
+    "name": "n3: valid non-object JSON is set aside",
+    "file": "src/store.js",
+    "from": "    // Valid JSON but not ours (an array, a number): set aside like a torn file.\n    await this.setAside();",
+    "to": ""
+  },
+  {
+    "name": "n2: two hours before are read",
+    "file": "src/constants.js",
+    "from": "export const LOOKBACK_MINUTES = 120;",
+    "to": "export const LOOKBACK_MINUTES = 60;"
   }
 ]

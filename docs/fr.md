@@ -55,13 +55,19 @@ en lecture seule :
 | ------------------------- | --------------------------------------------------------------------------------- |
 | Prochain départ           | texte, par exemple `14:05 RE 5 → Koblenz Hbf, voie 4 au lieu de 3, +4 min`        |
 | Prochain départ dans      | minutes jusqu’au prochain départ qui circule (retard compris)                     |
-| Retard du prochain départ | minutes, 0 à l’heure (seulement quand DB donne du direct pour ce train)           |
+| Retard du prochain départ | minutes, 0 à l’heure (données en direct seulement)                                |
 | Départs perturbés         | départs de la fenêtre supprimés ou en retard à partir du seuil (direct seulement) |
 
 L’heure affichée est l’heure prévue, heure locale de l’Allemagne. Un train
 supprimé n’est pas « le prochain départ » : c’est le suivant qui circule. Un
-train prévu dans l’heure précédente et encore attendu (en retard) est aussi
-affiché.
+train prévu dans les deux heures précédentes et encore attendu (en retard) est
+aussi affiché ; un train plus en retard que cela est manqué.
+
+Un train pour lequel DB ne signale aucun changement est à l’heure : c’est ainsi
+que fonctionnent les données en direct de DB (`/fchg` liste les changements).
+DB ne garantit pas que chaque train suivi y figure, et ses données ne
+distinguent pas un train à l’heure d’un train qu’elle ne suit pas : les deux
+s’affichent « à l’heure ».
 
 Les valeurs sont republiées chaque minute d’après ce qui a été lu (sans
 requête) : **Prochain départ dans** décompte entre deux lectures.
@@ -71,9 +77,6 @@ pas d’« inconnu ») :
 
 - aucun départ dans la fenêtre : le texte le dit, **Prochain départ dans** et
   **Retard** ne sont pas mis à jour (jamais un 0 pour « aucun ») ;
-- un train sans données en direct de DB : le texte dit « pas de direct », son
-  retard n’est pas mis à jour ; **Départs perturbés** n’est compté que si DB
-  donne du direct pour au moins un départ de la fenêtre ;
 - des données en direct de plus de 10 minutes (2,5 intervalles si c’est plus
   long) : le texte finit par « horaire prévu seulement », retard et
   perturbations ne sont pas mis à jour ;
@@ -81,6 +84,8 @@ pas d’« inconnu ») :
   heure d’horaires manquante : rien n’est publié, le statut le dit ;
 - l’heure répétée par le changement d’heure d’automne (02:00 à 03:00 heure
   d’hiver) : les heures sont ambiguës, rien n’est publié avant 03:00.
+  Dans l’heure qui suit, un train de l’heure répétée encore en retard
+  s’affiche avec un retard faux d’une heure (une heure par an).
 
 ## 4. Tableau de bord
 
@@ -93,7 +98,7 @@ DB.
 
 - À chaque intervalle, pour chaque gare : les changements en direct
   (`/fchg`), une requête ; les horaires de chaque heure de la fenêtre et de
-  l’heure précédente (`/plan`) une fois par heure ; la gare elle-même une fois (gardée d’un
+  des deux heures précédentes (`/plan`) une fois par heure ; la gare elle-même une fois (gardée d’un
   redémarrage à l’autre).
 - Une requête à la fois au plus, espacées de 1,5 s (40 par minute au plus,
   l’offre gratuite en permet 60). Un redémarrage, une reconnexion, un
@@ -105,8 +110,9 @@ DB.
 - **HTTP 429**, un 5xx sur la requête de gare, ou un 5xx sur toutes les gares
   d’un tour : toutes les requêtes attendent (Retry-After quand DB le donne,
   sinon 1 minute doublée jusqu’à 6 heures), même après un redémarrage. Un 5xx
-  sur les horaires d’une seule gare : seule cette gare attend (1 minute
-  doublée jusqu’à 30 minutes), les autres sont lues normalement.
+  sur les horaires d’une seule gare : seule cette gare attend (Retry-After
+  quand DB le donne, jusqu’à 6 heures ; sinon 1 minute doublée jusqu’à
+  30 minutes), les autres sont lues normalement.
 - **HTTP 401/403 sur la requête de gare** : les identifiants sont refusés.
   L’intégration s’arrête et ne les réessaie pas d’elle-même, même après un
   redémarrage ; saisissez d’autres identifiants ou appuyez sur **Tester les
