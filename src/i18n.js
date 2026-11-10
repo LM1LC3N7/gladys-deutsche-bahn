@@ -13,6 +13,8 @@ const TEXTS = {
   cancelled: { en: 'cancelled', fr: 'supprimé' },
   onTime: { en: 'on time', fr: "à l'heure" },
   noLive: { en: 'timetable only', fr: 'horaire prévu seulement' },
+  noLiveTrain: { en: 'no live data', fr: 'pas de direct' },
+  attribution: { en: 'Deutsche Bahn, CC BY 4.0', fr: 'Deutsche Bahn, CC BY 4.0' },
   none: { en: 'No departure in the next {minutes} min', fr: 'Aucun départ dans les {minutes} min' },
 
   // Status of the configuration screen.
@@ -105,6 +107,14 @@ const TEXTS = {
     en: 'Station {slot}: no live data, timetable only.',
     fr: 'Gare {slot} : pas de données en direct, horaires prévus seulement.',
   },
+  problem_server_station: {
+    en: 'Station {slot}: DB unavailable for it (HTTP {status}); tried again at {time}.',
+    fr: 'Gare {slot} : DB indisponible pour elle (HTTP {status}) ; nouvel essai à {time}.',
+  },
+  problem_dst: {
+    en: 'Station {slot}: hour repeated by the change of time, nothing published until 03:00.',
+    fr: 'Gare {slot} : heure répétée par le changement d’heure, rien publié avant 03:00.',
+  },
   problem_budget: {
     en: 'Station {slot}: left for the next round.',
     fr: 'Gare {slot} : remise au prochain tour.',
@@ -151,7 +161,10 @@ const TEXTS = {
     en: 'This station is not configured any more.',
     fr: 'Cette gare n’est plus configurée.',
   },
-  widgetNoData: { en: 'No timetable read yet.', fr: 'Aucun horaire lu pour l’instant.' },
+  widgetNoData: {
+    en: 'No timetable usable now (see the status of the integration).',
+    fr: 'Aucun horaire utilisable maintenant (voir le statut de l’intégration).',
+  },
   widgetLive: {
     en: 'Live data of {time} · Deutsche Bahn, CC BY 4.0',
     fr: 'Données en direct de {time} · Deutsche Bahn, CC BY 4.0',

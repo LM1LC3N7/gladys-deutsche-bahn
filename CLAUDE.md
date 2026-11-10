@@ -71,11 +71,16 @@ test/                             node --test, the SDK's fake Gladys, a scripted
   credentials or a success of the test button. A 401/403 on `/plan`/`/fchg` is
   checked on `/station` first; accepted there, only that station waits (5 min
   doubling to 1 h). A timeout or an unreadable answer is never a refusal.
-- **Pauses**: 429/5xx pause every request (Retry-After, else 1 min doubling,
-  6 h at most), kept in `/data`, on the monotonic clock.
-- **Unknown stays unknown**: no 0 for "no departure"; no delay nor count
-  without live data of the last LIVE_STALE; an incomplete timetable
-  publishes nothing.
+- **Pauses**: 429, a 5xx of `/station` or every station in 5xx in a round
+  pause every request (Retry-After, else 1 min doubling, 6 h at most), kept
+  in `/data`, on the monotonic clock. A 5xx on the page of one station holds
+  that station only (1 min doubling to 30 min): never a famine of the others.
+- **Unknown stays unknown**: no 0 for "no departure"; no delay for a train
+  absent from `/fchg`; no delay nor count without live data of the last
+  LIVE_STALE; an incomplete timetable, a window without any plan (404) or the
+  repeated autumn hour publishes nothing. The hour before the window is read
+  (late trains). The widget keeps 2 texts (core budget), the attribution in
+  the second one.
 - **Late answers**: every await of a round is followed by `gone(gen)`.
 - **/data**: unreadable is not empty: never written until read, read again
   every 10 s, one read at a time; a start waits for it 5 s at most.

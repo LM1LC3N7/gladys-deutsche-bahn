@@ -18,9 +18,13 @@
       say; the integration stays at 40).
 - [ ] What `/plan` answers for an hour without trains or too far ahead (404
       or an empty `<timetable/>`; both are read as an empty hour).
-- [ ] Whether `/fchg` gives a changed time `ct` for every train with live
-      tracking, or only when it differs (today: no `ct` = no delay known =
-      0 when the live data is fresh).
+- [ ] Whether `/fchg` lists every train with live tracking (with its `<dp>`)
+      or only the changed ones. Today a train absent from `/fchg` has no
+      delay published ("no live data"); a train listed without `ct` is on
+      time (0). If DB lists only changed trains, this hides on-time trains:
+      ask Louis before reading "absent" as "on time".
+- [ ] How far back DB still serves `/plan` (the hour before is read for the
+      late trains; a 404 there is an empty hour).
 - [ ] The size of `/fchg` for the biggest stations (limit: 4 MiB) and of a
       `/plan` hour (2 MiB).
 - [ ] How `/station/<name>` matches (prefix, part of the name) and whether
@@ -63,5 +67,11 @@
 - **Unknown stays unknown**: no next departure leaves `next_in` and `delay`
   unpublished; no live data for 10 minutes (2.5 intervals) leaves `delay` and
   `disrupted` unpublished; an incomplete timetable publishes nothing.
+- **Counter**: `disrupted` is `counter-sensor` / `integer` ("Counter
+  (integer)" in the core: a count that goes up and down, as the bike
+  counts of the transit siblings), the closest generic category.
+- **5xx**: on the timetable of one station, that station waits (1 min doubling
+  to 30 min); a global pause only for 429, a 5xx of `/station`, or every
+  station in 5xx in a round (review r1).
 - **Times**: local time of Germany (Europe/Berlin, Intl of Node); the text
   shows the planned time.

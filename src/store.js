@@ -5,7 +5,8 @@
 // salted hash, never a credential), and the stations already resolved (input
 // -> EVA number and name, no secret). Written through a temporary file and a
 // rename, one save after the other. A missing file is empty; a file that
-// cannot be read (EACCES, EIO, too large) is NOT empty: never overwritten.
+// cannot be read (EACCES, EIO, too large) is NOT empty: never overwritten;
+// one that does not parse is moved aside to `.bad` first.
 // -----------------------------------------------------------------------------
 
 import { open, readFile, rename } from 'node:fs/promises';
@@ -40,8 +41,13 @@ export class FileStore {
     try {
       data = JSON.parse(text);
     } catch {
-      // A torn or foreign file: nothing usable in it, but it is ours to
-      // replace only once read (it is read, so it is not "unreadable").
+      // A torn or foreign file: set aside as `.bad` (kept for a look), never
+      // overwritten in place; when it cannot be moved, it is unreadable.
+      try {
+        await rename(this.path, `${this.path}.bad`);
+      } catch (err) {
+        throw new StoreUnreadable(err?.code ?? 'unparsable');
+      }
       return {};
     }
     return data && typeof data === 'object' && !Array.isArray(data) ? data : {};

@@ -42,7 +42,11 @@ export function buildBoard(departures, { now, lookaheadMinutes, thresholdMinutes
   });
   const running = rows.filter((d) => !d.cancelled);
   const next = running[0];
-  const disrupted = rows.filter((d) => d.cancelled || delayOf(d) >= thresholdMinutes).length;
+  const disrupted = rows.filter(
+    (d) => d.cancelled || (d.liveKnown && delayOf(d) >= thresholdMinutes),
+  ).length;
+  // A count only when DB gave live data for at least one departure of the window.
+  const counted = live && rows.some((d) => d.liveKnown);
   return {
     live,
     rows,
@@ -50,7 +54,7 @@ export function buildBoard(departures, { now, lookaheadMinutes, thresholdMinutes
     nextIn: next
       ? Math.max(0, Math.floor(((live ? next.time : next.planned) - now) / MINUTE))
       : undefined,
-    delay: next && live ? delayOf(next) : undefined,
-    disrupted: live ? Math.min(MAX_COUNT, disrupted) : undefined,
+    delay: next && live && next.liveKnown ? delayOf(next) : undefined,
+    disrupted: counted ? Math.min(MAX_COUNT, disrupted) : undefined,
   };
 }

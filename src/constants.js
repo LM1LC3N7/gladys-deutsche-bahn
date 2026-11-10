@@ -47,6 +47,10 @@ export const PLAN_REFRESH = HOUR;
 export const PLAN_EMPTY_RETRY = 15 * MINUTE;
 /** At most this many planned hours kept per station. */
 export const MAX_PLAN_HOURS = 6;
+/** The hour before is read too: a train planned then and late still leaves. */
+export const LOOKBACK_MINUTES = 60;
+/** The boards are published again every minute from what is held (no request). */
+export const TICK = MINUTE;
 
 /** The live changes are not used any more past this age (or 2.5 intervals). */
 export const LIVE_STALE = 10 * MINUTE;
@@ -57,6 +61,9 @@ export const PAUSE_MAX = 6 * HOUR;
 /** A 401/403 on a timetable page while the credentials are accepted: that page waits. */
 export const SECONDARY_MIN = 5 * MINUTE;
 export const SECONDARY_MAX = HOUR;
+/** A 5xx on a timetable page of one station: that station waits 1 min doubling to 30 min. */
+export const STATION_RETRY_MIN = MINUTE;
+export const STATION_RETRY_MAX = 30 * MINUTE;
 
 /** /data: a slow or unreadable file is read again on this timer, one read at a time. */
 export const STORE_RETRY = 10 * SECOND;

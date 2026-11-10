@@ -20,8 +20,8 @@
   {
     "name": "a 429/5xx is decided before the next request of the lane",
     "file": "src/app.js",
-    "from": "if (err?.code === 'rate_limited' || err?.code === 'server') this.notePause(err);",
-    "to": "if (false) this.notePause(err);"
+    "from": "            this.notePause(err);\n          }",
+    "to": "          }"
   },
   {
     "name": "a 401/403 of a timetable page is not a refusal by itself",
@@ -32,13 +32,13 @@
   {
     "name": "the wait of a secondary 401/403 doubles",
     "file": "src/app.js",
-    "from": "Math.min(SECONDARY_MAX, slot.secondary.delay * 2)",
-    "to": "SECONDARY_MIN"
+    "from": "? Math.min(SECONDARY_MAX, slot.wait.delay * 2)",
+    "to": "? SECONDARY_MIN"
   },
   {
-    "name": "a station under a secondary 401/403 waits",
+    "name": "a station waiting (401/403 or 5xx of its page) is skipped",
     "file": "src/app.js",
-    "from": "if (slot.secondary && slot.secondary.due > this.monotonic()) continue;",
+    "from": "if (slot.wait && slot.wait.due > this.monotonic()) continue;",
     "to": "if (false) continue;"
   },
   {
@@ -86,7 +86,7 @@
   {
     "name": "a pause is lifted by a good round",
     "file": "src/app.js",
-    "from": "if (ok && this.pause) {",
+    "from": "if (ok && this.pause && !this.pauseActive()) {",
     "to": "if (false) {"
   },
   {
@@ -198,10 +198,10 @@
     "to": "if (status === 401)"
   },
   {
-    "name": "no delay without live data",
+    "name": "no delay without live data (stale)",
     "file": "src/board.js",
-    "from": "delay: next && live ? delayOf(next) : undefined",
-    "to": "delay: next ? delayOf(next) : undefined"
+    "from": "delay: next && live && next.liveKnown ? delayOf(next) : undefined,",
+    "to": "delay: next && next.liveKnown ? delayOf(next) : undefined,"
   },
   {
     "name": "a cancelled train is never the next one",
@@ -250,5 +250,149 @@
     "file": "src/app.js",
     "from": "if (this.abort.signal.aborted) this.abort = new AbortController();",
     "to": ""
+  },
+  {
+    "name": "I7: round saves the attempt before the first request",
+    "file": "src/app.js",
+    "from": "    this.data.lastRound = this.now();\n    await this.save();",
+    "to": "    this.data.lastRound = this.now();"
+  },
+  {
+    "name": "I1: the hour before is read",
+    "file": "src/app.js",
+    "from": "now - LOOKBACK_MINUTES * MINUTE,",
+    "to": "now,"
+  },
+  {
+    "name": "I3: no plan for the window is not_found",
+    "file": "src/app.js",
+    "from": "if (plans.slice(Math.max(0, current)).every((p) => p.missing)) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "I4: a 5xx of one station's page holds that station only",
+    "file": "src/app.js",
+    "from": "if (err?.code === 'rate_limited' || (err?.code === 'server' && principal)) {",
+    "to": "if (err?.code === 'rate_limited' || err?.code === 'server') {"
+  },
+  {
+    "name": "I4: every station in 5xx pauses all",
+    "file": "src/app.js",
+    "from": "if (!ok && tried > 0 && serverFailed === tried && lastServer) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "I4: the wait of a station in 5xx doubles",
+    "file": "src/app.js",
+    "from": "? Math.min(STATION_RETRY_MAX, slot.wait.delay * 2)",
+    "to": "? STATION_RETRY_MIN"
+  },
+  {
+    "name": "I5: no delay for a train without live data",
+    "file": "src/board.js",
+    "from": "delay: next && live && next.liveKnown ? delayOf(next) : undefined,",
+    "to": "delay: next && live ? delayOf(next) : undefined,"
+  },
+  {
+    "name": "I5: no count without live data in the window",
+    "file": "src/board.js",
+    "from": "disrupted: counted ? Math.min(MAX_COUNT, disrupted) : undefined,",
+    "to": "disrupted: live ? Math.min(MAX_COUNT, disrupted) : undefined,"
+  },
+  {
+    "name": "I5: the text says no live data for the train",
+    "file": "src/devices.js",
+    "from": "  } else if (!departure.liveKnown) {",
+    "to": "  } else if (false) {"
+  },
+  {
+    "name": "I6: /data unread: a whole interval first",
+    "file": "src/app.js",
+    "from": "        due = mono + interval;\n      } else {",
+    "to": "        due = mono;\n      } else {"
+  },
+  {
+    "name": "I6: a late /data read places the round again",
+    "file": "src/app.js",
+    "from": "    else if (this.roundTimer) this.schedule(gen);",
+    "to": ""
+  },
+  {
+    "name": "I2: the attribution rides in the only text of an empty board",
+    "file": "src/app.js",
+    "from": " · ${t('attribution', lang)}`,",
+    "to": "`,"
+  },
+  {
+    "name": "m1: changed credentials lift a refusal in the same process",
+    "file": "src/app.js",
+    "from": "if (credsChanged && (this.config.clientId || this.config.apiKey) && this.refused) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "m2: a stop during getConfig wins",
+    "file": "src/app.js",
+    "from": "    if (epoch !== this.stopEpoch) return;\n    this.configDelay = 0;",
+    "to": "    this.configDelay = 0;"
+  },
+  {
+    "name": "m3: an unparsable /data is moved aside",
+    "file": "src/store.js",
+    "from": "await rename(this.path, `${this.path}.bad`);",
+    "to": ""
+  },
+  {
+    "name": "m4: nothing published in the repeated autumn hour",
+    "file": "src/app.js",
+    "from": "if (berlin(now).h === berlin(now - HOUR).h) return { problem: 'dst' };",
+    "to": ""
+  },
+  {
+    "name": "m4: slices often enough to never skip an hour (a one-hour step is equivalent: a local hour lasts at least an hour)",
+    "file": "src/time.js",
+    "from": "t += 15 * 60 * 1000",
+    "to": "t += 2 * 60 * 60 * 1000"
+  },
+  {
+    "name": "m5: the minute tick",
+    "file": "src/app.js",
+    "from": "    this.armTick(gen);\n    await this.report(gen);",
+    "to": "    await this.report(gen);"
+  },
+  {
+    "name": "m8: a plan older than 6 h is not used",
+    "file": "src/app.js",
+    "from": "mono - p.at > PLAN_MAX_AGE",
+    "to": "false"
+  },
+  {
+    "name": "m8: the widget shows 8 rows at most",
+    "file": "src/app.js",
+    "from": "board.rows.slice(0, 8)",
+    "to": "board.rows"
+  },
+  {
+    "name": "m8: an old generation publishes nothing",
+    "file": "src/app.js",
+    "from": "if (this.gone(gen) || !states.length) return;",
+    "to": "if (!states.length) return;"
+  },
+  {
+    "name": "m8: control characters removed from DB texts",
+    "file": "src/db/model.js",
+    "from": "value.replace(CONTROL, '')",
+    "to": "value"
+  },
+  {
+    "name": "m8: an added train needs its own label",
+    "file": "src/db/model.js",
+    "from": "if (!seen.has(id) && change.tl?.c && change.dp?.pt)",
+    "to": "if (!seen.has(id) && change.dp?.pt)"
+  },
+  {
+    "name": "m8: the pause count read back is capped",
+    "file": "src/app.js",
+    "from": "count: Math.min(pause.count, 16),",
+    "to": "count: pause.count,"
   }
 ]

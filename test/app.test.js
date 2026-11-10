@@ -27,7 +27,13 @@ test('first round: station resolved, two planned hours, the live changes, four s
   await s.run();
   assert.deepEqual(
     s.db.calls.map((c) => c.path),
-    ['/station/Köln Hbf', '/plan/8000207/261110/14', '/plan/8000207/261110/15', '/fchg/8000207'],
+    [
+      '/station/Köln Hbf',
+      '/plan/8000207/261110/13',
+      '/plan/8000207/261110/14',
+      '/plan/8000207/261110/15',
+      '/fchg/8000207',
+    ],
   );
   assert.equal(s.last(F('next')), '14:05 RE 5 → Koblenz Hbf, pl. 4 instead of 3, +4 min');
   assert.equal(s.last(F('next_in')), 6);
@@ -55,12 +61,12 @@ test('the pace: an interval start to start, the plan read once an hour, never so
   assert.equal(fchg(s), 1, 'not before the interval');
   await s.advance(20 * SECOND);
   assert.equal(fchg(s), 2);
-  assert.equal(s.db.count('/plan/'), 2, 'the planned hours are kept');
+  assert.equal(s.db.count('/plan/'), 3, 'the planned hours are kept');
   assert.equal(s.db.count('/station/'), 1, 'the station is resolved once');
   await s.advance(60 * MINUTE);
   assert.equal(fchg(s), 32);
   // 15:02 -> 16:02: hour 16 is new, 15 and 16 again after an hour.
-  assert.ok(s.db.count('/plan/') >= 3 && s.db.count('/plan/') <= 5, `${s.db.count('/plan/')}`);
+  assert.ok(s.db.count('/plan/') >= 4 && s.db.count('/plan/') <= 6, `${s.db.count('/plan/')}`);
   await s.app.stop();
 });
 
@@ -74,8 +80,8 @@ test('the next departure moves with the time; a reconnection never reads sooner'
   assert.ok(s.gladys.fake.discoveredDevices.length === 1);
   await s.advance(2 * MINUTE);
   assert.equal(fchg(s), 2);
-  // 14:04:00: the RE 5 leaves at 14:09.
-  assert.equal(s.last(F('next_in')), 5);
+  // 14:04:20 (the minute tick): the RE 5 leaves at 14:09.
+  assert.equal(s.last(F('next_in')), 4);
   await s.app.stop();
 });
 
@@ -111,9 +117,10 @@ test('the form saved unchanged keeps the pace; a new station is read 30 s after 
   await s.gladys.fake.configUpdated(CONFIG);
   await s.advance(10 * SECOND);
   assert.equal(fchg(s), 1);
+  const calls = s.db.calls.length;
   await s.gladys.fake.configUpdated({ ...CONFIG, station_2: 'FF' });
   await s.advance(5 * SECOND);
-  assert.equal(fchg(s), 1, 'not before 30 s after the last round');
+  assert.equal(s.db.calls.length, calls, 'not before 30 s after the last round');
   await s.advance(20 * SECOND);
   assert.equal(s.db.count(`/fchg/${OTHER_EVA}`), 1);
   assert.equal(s.gladys.fake.discoveredDevices.length, 2);
@@ -270,19 +277,32 @@ test('a pause survives a restart; 5xx pauses grow; a pause is capped at 6 h', as
     path.startsWith('/fchg/') ? new Response('', { status: 500 }) : undefined;
   await t.run();
   assert.equal(fchg(t), 1);
-  // Pauses of 1 and 2 min fit in the interval; the third (4 min) and the
-  // fourth (8 min) push the rounds back.
-  await t.advance(4 * MINUTE);
-  assert.equal(fchg(t), 3, '14:04, 14:06');
-  await t.advance(3 * MINUTE);
-  assert.equal(fchg(t), 3, 'not at 14:08');
-  await t.advance(MINUTE);
-  assert.equal(fchg(t), 4, '14:10');
-  await t.advance(7 * MINUTE);
-  assert.equal(fchg(t), 4, 'not before 14:18');
-  await t.advance(MINUTE);
-  assert.equal(fchg(t), 5);
+  // The only station in 5xx: DB itself is down, every request waits and the
+  // waits grow (1, 2, 4, 8, 16, 30 min), never a storm.
+  assert.match(text(t.status().message), /unavailable \(HTTP 500\)/);
+  await t.advance(60 * MINUTE);
+  assert.ok(fchg(t) >= 4 && fchg(t) <= 8, `${fchg(t)} reads in an hour`);
   await t.app.stop();
+});
+
+test('one station in 5xx waits alone: the other one is read at every interval', async () => {
+  const s = await setup({ config: { ...CONFIG, station_2: 'FF' } });
+  s.db.override = (path) =>
+    path === `/fchg/${OTHER_EVA}` ? new Response('', { status: 504 }) : undefined;
+  await s.run(30 * SECOND);
+  await s.advance(60 * MINUTE);
+  assert.ok(
+    s.db.count(`/fchg/${EVA}`) >= 30,
+    `${s.db.count(`/fchg/${EVA}`)} reads of the sound station`,
+  );
+  assert.ok(
+    s.db.count(`/fchg/${OTHER_EVA}`) <= 8,
+    `${s.db.count(`/fchg/${OTHER_EVA}`)} reads in 504`,
+  );
+  assert.equal(s.app.pause, undefined, 'no global pause');
+  assert.equal(s.status().connected, true);
+  assert.match(text(s.status().message), /Station 2: DB unavailable for it \(HTTP 504\)/);
+  await s.app.stop();
 });
 
 test('a pause set while a request waits its turn: that request is never sent', async () => {
@@ -394,7 +414,7 @@ test('no departure in the window: the text says so, no minutes and no delay publ
   assert.equal(s.last(F('next')), 'No departure in the next 60 min');
   assert.equal(s.states(F('next_in')).length, 0);
   assert.equal(s.states(F('delay')).length, 0);
-  assert.equal(s.last(F('disrupted')), 0);
+  assert.equal(s.states(F('disrupted')).length, 0, 'no live data for any departure: no count');
   await s.app.stop();
 });
 
@@ -471,6 +491,8 @@ test('/data that never answers: the start goes on after 5 s, one read at a time,
   const started = s.app.connected();
   await s.advance(30 * SECOND);
   await started;
+  assert.equal(fchg(s), 0, 'the last round is unknown: a whole interval first');
+  await s.advance(2 * MINUTE);
   assert.equal(fchg(s), 1);
   assert.equal(store.loads, 1, 'one read at a time');
   assert.equal(store.saves, 0);

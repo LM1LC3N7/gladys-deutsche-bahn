@@ -132,7 +132,7 @@ test('board: window, filters, next that runs, delay, disrupted from the threshol
   assert.ok(board.rows.every((d) => d.planned <= NOW + 60 * MINUTE));
   const ice = buildBoard(deps, { ...base, filter: { lines: ['ICE'] } });
   assert.equal(ice.next.line, 'ICE 514');
-  assert.equal(ice.delay, 0);
+  assert.equal(ice.delay, undefined, 'the ICE is not in /fchg: its delay is unknown');
   assert.equal(
     buildBoard(deps, { ...base, filter: { lines: ['S12'] } }).next,
     undefined,
@@ -153,7 +153,7 @@ test('board: window, filters, next that runs, delay, disrupted from the threshol
   assert.equal(empty.next, undefined);
   assert.equal(empty.nextIn, undefined);
   assert.equal(empty.delay, undefined);
-  assert.equal(empty.disrupted, 0);
+  assert.equal(empty.disrupted, undefined, 'nothing live in the window: no count');
 });
 
 test('board: filters on categories and lines without spaces', () => {
@@ -163,4 +163,17 @@ test('board: filters on categories and lines without spaces', () => {
   assert.ok(!matches(d, { lines: ['RE50'] }));
   assert.ok(matches(d, { via: 'kob' }));
   assert.ok(!matches(d, { via: 'mainz' }));
+});
+
+test('board: no delay nor count when the live data is stale, whatever the departures hold', () => {
+  const deps = departuresOf([plan14(), plan15()], parseTimetable(changesXml()));
+  const board = buildBoard(deps, {
+    now: NOW,
+    lookaheadMinutes: 60,
+    thresholdMinutes: 5,
+    live: false,
+    filter: {},
+  });
+  assert.equal(board.delay, undefined);
+  assert.equal(board.disrupted, undefined);
 });

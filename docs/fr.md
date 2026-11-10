@@ -55,39 +55,58 @@ en lecture seule :
 | ------------------------- | --------------------------------------------------------------------------------- |
 | Prochain départ           | texte, par exemple `14:05 RE 5 → Koblenz Hbf, voie 4 au lieu de 3, +4 min`        |
 | Prochain départ dans      | minutes jusqu’au prochain départ qui circule (retard compris)                     |
-| Retard du prochain départ | minutes, 0 à l’heure (données en direct seulement)                                |
+| Retard du prochain départ | minutes, 0 à l’heure (seulement quand DB donne du direct pour ce train)           |
 | Départs perturbés         | départs de la fenêtre supprimés ou en retard à partir du seuil (direct seulement) |
 
 L’heure affichée est l’heure prévue, heure locale de l’Allemagne. Un train
-supprimé n’est pas « le prochain départ » : c’est le suivant qui circule.
+supprimé n’est pas « le prochain départ » : c’est le suivant qui circule. Un
+train prévu dans l’heure précédente et encore attendu (en retard) est aussi
+affiché.
 
-Quand aucun départ n’est dans la fenêtre, le texte le dit et **Prochain départ
-dans** et **Retard** ne sont pas mis à jour (leur dernière valeur reste ; aucun
-0 n’est publié pour « aucun »). Quand les données en direct de DB ont plus de
-10 minutes (2,5 intervalles si c’est plus long), le texte finit par « horaire
-prévu seulement » et le retard et le nombre de perturbations ne sont pas mis à
-jour.
+Les valeurs sont republiées chaque minute d’après ce qui a été lu (sans
+requête) : **Prochain départ dans** décompte entre deux lectures.
+
+Ce qui n’est pas connu n’est pas publié (la dernière valeur reste ; Gladys n’a
+pas d’« inconnu ») :
+
+- aucun départ dans la fenêtre : le texte le dit, **Prochain départ dans** et
+  **Retard** ne sont pas mis à jour (jamais un 0 pour « aucun ») ;
+- un train sans données en direct de DB : le texte dit « pas de direct », son
+  retard n’est pas mis à jour ; **Départs perturbés** n’est compté que si DB
+  donne du direct pour au moins un départ de la fenêtre ;
+- des données en direct de plus de 10 minutes (2,5 intervalles si c’est plus
+  long) : le texte finit par « horaire prévu seulement », retard et
+  perturbations ne sont pas mis à jour ;
+- aucun horaire pour l’heure en cours ni les suivantes (DB répond 404), ou une
+  heure d’horaires manquante : rien n’est publié, le statut le dit ;
+- l’heure répétée par le changement d’heure d’automne (02:00 à 03:00 heure
+  d’hiver) : les heures sont ambiguës, rien n’est publié avant 03:00.
 
 ## 4. Tableau de bord
 
 Le widget **Départs Deutsche Bahn** montre les 8 prochains départs d’une gare,
-avec le retard, la voie et les suppressions, et l’heure des données en direct.
-Il utilise ce que l’intégration a déjà lu : l’ouvrir n’envoie aucune requête à
+avec le retard, la voie et les suppressions, l’heure des données en direct et
+l’attribution des données. Il utilise ce que l’intégration a déjà lu : l’ouvrir n’envoie aucune requête à
 DB.
 
 ## 5. Comment elle lit DB, et ses limites
 
 - À chaque intervalle, pour chaque gare : les changements en direct
-  (`/fchg`), une requête ; les horaires de chaque heure de la fenêtre
-  (`/plan`) une fois par heure ; la gare elle-même une fois (gardée d’un
+  (`/fchg`), une requête ; les horaires de chaque heure de la fenêtre et de
+  l’heure précédente (`/plan`) une fois par heure ; la gare elle-même une fois (gardée d’un
   redémarrage à l’autre).
 - Une requête à la fois au plus, espacées de 1,5 s (40 par minute au plus,
   l’offre gratuite en permet 60). Un redémarrage, une reconnexion, un
   enregistrement du formulaire ou le bouton de test ne font pas venir les
   lectures plus tôt que l’intervalle (une gare changée attend 30 s après la
   dernière lecture).
-- **HTTP 429 ou 5xx** : toutes les requêtes attendent (Retry-After quand DB le
-  donne, sinon 1 minute doublée jusqu’à 6 heures), même après un redémarrage.
+- Quand /data ne peut pas être lu au démarrage, la première lecture attend un
+  intervalle entier.
+- **HTTP 429**, un 5xx sur la requête de gare, ou un 5xx sur toutes les gares
+  d’un tour : toutes les requêtes attendent (Retry-After quand DB le donne,
+  sinon 1 minute doublée jusqu’à 6 heures), même après un redémarrage. Un 5xx
+  sur les horaires d’une seule gare : seule cette gare attend (1 minute
+  doublée jusqu’à 30 minutes), les autres sont lues normalement.
 - **HTTP 401/403 sur la requête de gare** : les identifiants sont refusés.
   L’intégration s’arrête et ne les réessaie pas d’elle-même, même après un
   redémarrage ; saisissez d’autres identifiants ou appuyez sur **Tester les
@@ -103,10 +122,16 @@ DB.
 `/data/deutsche-bahn.json` : l’heure du dernier tour, une pause, un refus (8
 bits d’une empreinte salée des identifiants, rien de plus) et les gares
 trouvées (nom, numéro EVA, code DS100). Aucun identifiant. Quand le fichier ne
-peut pas être lu, il n’est pas écrasé et il est relu toutes les 10 secondes.
+peut pas être lu, il n’est pas écrasé et il est relu toutes les 10 secondes ;
+un fichier qui ne s’analyse pas est d’abord mis de côté en
+`deutsche-bahn.json.bad`.
 
 ## Données et licence
 
-Données d’horaires : Deutsche Bahn AG, via la DB API Marketplace, sous licence
-Creative Commons Attribution 4.0 (CC BY 4.0). Le widget affiche l’heure des
-données qu’il montre.
+Données d’horaires : Deutsche Bahn AG, via la
+[DB API Marketplace](https://developers.deutschebahn.com/db-api-marketplace/apis/product/timetables),
+sous [licence Creative Commons Attribution 4.0 (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/deed.fr).
+Les données sont modifiées : horaires prévus et changements en direct
+fusionnés, filtrés par ligne et direction, et résumés (prochain départ, retard
+en minutes entières, nombre de départs perturbés). Le widget affiche l’heure
+des données en direct qu’il montre.

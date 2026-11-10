@@ -62,6 +62,7 @@ const base = mkdtempSync(join(tmpdir(), 'deutsche-bahn-mutants-'));
 let current;
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
+    console.log(`stopped by ${signal}: copies removed, nothing judged`);
     try {
       if (current) process.kill(-current.pid, 'SIGKILL');
     } catch {
@@ -75,7 +76,11 @@ try {
   // The unmutated copy first: a suite already red would mark every mutant
   // "killed".
   const clean = mkdtempSync(join(base, 'clean-'));
-  cpSync(REPO, clean, { recursive: true, filter: (src) => basename(src) !== '.git' });
+  cpSync(REPO, clean, {
+    recursive: true,
+    verbatimSymlinks: true,
+    filter: (src) => basename(src) !== '.git',
+  });
   const baseline = await run(clean);
   rmSync(clean, { recursive: true, force: true });
   if (baseline.code !== 0) {
@@ -90,6 +95,8 @@ try {
       // shared repository (an `npm ci` in a copy would empty it).
       cpSync(REPO, dir, {
         recursive: true,
+        // node_modules/.bin links stay relative: nothing points back to the repository.
+        verbatimSymlinks: true,
         filter: (src) => basename(src) !== '.git',
       });
       const file = join(dir, m.file);

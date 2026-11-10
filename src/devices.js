@@ -121,6 +121,8 @@ export function describe(departure, { live, language = 'en' }) {
     parts.push(t('noLive', language));
   } else if (departure.cancelled) {
     parts.push(t('cancelled', language));
+  } else if (!departure.liveKnown) {
+    parts.push(t('noLiveTrain', language));
   } else {
     const delay = delayOf(departure);
     parts.push(delay > 0 ? `+${delay} min` : t('onTime', language));

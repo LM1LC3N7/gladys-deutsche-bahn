@@ -28,6 +28,7 @@ const INTERVAL = 60_000;
 
 test('real clock: rounds at 0, the interval and twice the interval; timers bounded', async (t) => {
   const reads = [];
+  let last;
   const server = createServer((req, res) => {
     const path = decodeURIComponent(req.url);
     let body;
@@ -36,9 +37,12 @@ test('real clock: rounds at 0, the interval and twice the interval; timers bound
       const [, , eva, date, hour] = path.split('/');
       body = planXml(eva, date, hour);
     } else if (path.startsWith('/fchg/')) {
-      reads.push(performance.now() * SPEED);
       body = changesXml();
     }
+    // The first request of a round (the requests of one round are 1.5 s apart).
+    const at = performance.now() * SPEED;
+    if (!last || at - last > 20_000) reads.push(at);
+    last = at;
     res.writeHead(body ? 200 : 404, { 'content-type': 'application/xml' });
     res.end(body ?? '');
   });

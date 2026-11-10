@@ -37,6 +37,7 @@ import {
   CONFIG_RETRY_MIN,
   HOUR,
   LIVE_STALE,
+  LOOKBACK_MINUTES,
   MAX_PLAN_HOURS,
   MAX_RESOLVED,
   MAX_SEARCH_RESULTS,
@@ -53,6 +54,9 @@ import {
   SEARCH_MIN_GAP,
   SECONDARY_MAX,
   SECONDARY_MIN,
+  STATION_RETRY_MAX,
+  STATION_RETRY_MIN,
+  TICK,
   STORE_RETRY,
   STORE_WAIT,
   TEST_MIN_GAP,
@@ -63,7 +67,7 @@ import { clean, departuresOf, parseStations, parseTimetable } from './db/model.j
 import { buildDevice, idsOf, parseDeviceId, statesOf } from './devices.js';
 import { both, t } from './i18n.js';
 import { FileStore } from './store.js';
-import { clock, slicesBetween } from './time.js';
+import { berlin, clock, sliceOf, slicesBetween } from './time.js';
 
 /** A planned hour older than this is not used any more (reads failing for long). */
 const PLAN_MAX_AGE = 6 * HOUR;
@@ -161,7 +165,7 @@ function newSlot(station) {
     problem: undefined,
     lastTried: -Infinity,
     okRound: 0,
-    secondary: undefined,
+    wait: undefined,
   };
 }
 
@@ -206,6 +210,8 @@ export class DbApp {
     this.lastRoundMono = undefined;
     this.round_ = 0;
     this.failures = 0;
+    this.stopEpoch = 0;
+    this.tickTimer = null;
 
     this.lane = Promise.resolve();
     this.lastRequestMono = -Infinity;
@@ -228,6 +234,8 @@ export class DbApp {
 
   /** Every (re)connection to Gladys: read the config (retried for ever), then start. */
   async connected() {
+    // A stop while getConfig() waits wins: nothing starts again after it.
+    const epoch = this.stopEpoch;
     this.stopped = false;
     this.lastStatus = undefined;
     // What Gladys holds may be older than this process knows: everything is
@@ -241,7 +249,7 @@ export class DbApp {
     try {
       config = await this.gladys.getConfig();
     } catch (err) {
-      if (this.stopped) return;
+      if (this.stopped || epoch !== this.stopEpoch) return;
       this.configDelay = Math.min(
         CONFIG_RETRY_MAX,
         Math.max(CONFIG_RETRY_MIN, this.configDelay * 2),
@@ -256,6 +264,7 @@ export class DbApp {
       }, this.configDelay);
       return;
     }
+    if (epoch !== this.stopEpoch) return;
     this.configDelay = 0;
     await this.start(config);
   }
@@ -268,6 +277,12 @@ export class DbApp {
       config.clientId !== this.config.clientId || config.apiKey !== this.config.apiKey;
     const key = readingKey(config);
     const changed = credsChanged || key !== this.readingKey;
+    // Credentials changed in this process: always tried, even when their
+    // 8-bit tag matches the refused one (a restart keeps the tag only).
+    if (credsChanged && (this.config.clientId || this.config.apiKey) && this.refused) {
+      this.refused = undefined;
+      this.data.refused = null;
+    }
     this.config = config;
     this.readingKey = key;
     // After a stop, the requests of the new start need a live signal.
@@ -284,7 +299,7 @@ export class DbApp {
             ...(this.apiBase ? { base: this.apiBase } : {}),
           })
         : undefined;
-      for (const slot of this.slots) slot.secondary = undefined;
+      for (const slot of this.slots) slot.wait = undefined;
       this.failures = 0;
     }
     this.slots = config.stations.map((station) => {
@@ -300,13 +315,31 @@ export class DbApp {
     await this.publishDiscovery(gen);
     if (this.gone(gen)) return;
     this.schedule(gen, changed);
+    this.armTick(gen);
     await this.report(gen);
+  }
+
+  /** Every minute, the boards again from what is held (no request): `next_in` moves. */
+  armTick(gen) {
+    if (this.tickTimer) this.timers.clearTimeout(this.tickTimer);
+    this.tickTimer = this.timers.setTimeout(() => {
+      this.tickTimer = null;
+      if (this.gone(gen)) return;
+      this.publishBoards(gen, { tick: true })
+        .catch(() => {})
+        .then(() => {
+          if (!this.gone(gen)) this.armTick(gen);
+        });
+    }, TICK);
   }
 
   async stop() {
     this.stopped = true;
+    this.stopEpoch += 1;
     this.gen += 1;
     this.clearRound();
+    if (this.tickTimer) this.timers.clearTimeout(this.tickTimer);
+    this.tickTimer = null;
     for (const timer of [this.configTimer, this.storeTimer]) {
       if (timer) this.timers.clearTimeout(timer);
     }
@@ -396,6 +429,9 @@ export class DbApp {
     // What happened while /data was unreadable is saved now.
     await this.save();
     if (this.isRefused()) this.clearRound();
+    // The round waiting for /data is placed again from what it holds (its
+    // last round, its pause).
+    else if (this.roundTimer) this.schedule(gen);
     await this.report(gen);
   }
 
@@ -487,8 +523,13 @@ export class DbApp {
     } else {
       const last = this.data.lastRound;
       const now = this.now();
-      // A time of /data in the future is invalid: ignored.
-      due = finite(last) && last <= now ? mono + Math.max(0, interval - (now - last)) : mono;
+      if (this.storeState !== 'ok') {
+        // /data not read: its last round is unknown, a whole interval is waited.
+        due = mono + interval;
+      } else {
+        // A time of /data in the future is invalid: ignored.
+        due = finite(last) && last <= now ? mono + Math.max(0, interval - (now - last)) : mono;
+      }
     }
     if (this.pause) due = Math.max(due, this.pause.due);
     this.clearRound();
@@ -536,7 +577,10 @@ export class DbApp {
         // Decided before the next request of the lane may go: a 429/5xx pauses
         // it, a refusal of `/station` stops it (saved by the caller).
         if (!this.gone(gen)) {
-          if (err?.code === 'rate_limited' || err?.code === 'server') this.notePause(err);
+          // A 5xx of one station's page only holds that station (see readSlot).
+          if (err?.code === 'rate_limited' || (err?.code === 'server' && principal)) {
+            this.notePause(err);
+          }
           if (err?.code === 'refused' && principal) this.noteRefused(err.status);
         }
         throw err;
@@ -610,16 +654,24 @@ export class DbApp {
     if (this.gone(gen)) return;
     const deadline = mono + ROUND_BUDGET;
     let stop;
+    let tried = 0;
+    let serverFailed = 0;
+    let lastServer;
     const order = [...this.slots].sort((a, b) => a.lastTried - b.lastTried);
     for (const slot of order) {
       if (this.monotonic() > deadline) {
         slot.problem = { code: 'budget' };
         continue;
       }
-      if (slot.secondary && slot.secondary.due > this.monotonic()) continue;
+      if (slot.wait && slot.wait.due > this.monotonic()) continue;
       slot.lastTried = this.monotonic();
+      tried += 1;
       try {
         await this.readSlot(gen, slot, round);
+        if (slot.problem?.code === 'server_station') {
+          serverFailed += 1;
+          lastServer = slot.lastServer;
+        }
       } catch (err) {
         if (this.gone(gen) || err?.code === 'aborted') return;
         const code = err instanceof DbError ? err.code : 'bad_response';
@@ -644,11 +696,16 @@ export class DbApp {
     const ok = this.slots.some((s) => s.okRound === round);
     if (!stop) {
       this.failures = ok ? 0 : this.failures + 1;
-      if (ok && this.pause) {
-        this.pause = undefined;
-        this.data.pause = null;
-        await this.save();
+      if (!ok && tried > 0 && serverFailed === tried && lastServer) {
+        // Every station tried answered 5xx: DB itself is down, all wait.
+        await this.setPause(lastServer);
       }
+    }
+    if (ok && this.pause && !this.pauseActive()) {
+      // A station read: the pause count starts again from 1 min.
+      this.pause = undefined;
+      this.data.pause = null;
+      await this.save();
     }
     await this.publishBoards(gen);
     if (this.gone(gen)) return;
@@ -662,12 +719,12 @@ export class DbApp {
       if (this.gone(gen) || !slot.eva) return;
     }
     const now = this.now();
-    const needed = slicesBetween(now, now + this.config.lookaheadMinutes * MINUTE);
+    const needed = this.windowOf(now);
     const keys = new Set(needed.map((s) => s.key));
     for (const key of slot.plans.keys()) {
       if (!keys.has(key)) slot.plans.delete(key);
     }
-    for (const slice of needed.slice(0, MAX_PLAN_HOURS)) {
+    for (const slice of needed) {
       const kept = slot.plans.get(slice.key);
       if (kept && this.monotonic() < kept.expires) continue;
       let text;
@@ -681,12 +738,14 @@ export class DbApp {
           const mono = this.monotonic();
           slot.plans.set(slice.key, {
             stops: new Map(),
+            missing: true,
             at: mono,
             expires: mono + PLAN_EMPTY_RETRY,
           });
           continue;
         }
         if (err?.code === 'refused') return this.secondary(gen, slot, err);
+        if (err?.code === 'server' && !this.gone(gen)) return this.holdStation(slot, err);
         throw err;
       }
       if (this.gone(gen)) return;
@@ -699,11 +758,12 @@ export class DbApp {
       text = await this.request(gen, (c, signal) => c.changes(slot.eva, signal));
     } catch (err) {
       if (err?.code === 'refused') return this.secondary(gen, slot, err);
+      if (err?.code === 'server' && !this.gone(gen)) return this.holdStation(slot, err);
       throw err;
     }
     if (this.gone(gen)) return;
     slot.live = { changes: parse(parseTimetable, text), at: this.now(), mono: this.monotonic() };
-    slot.secondary = undefined;
+    slot.wait = undefined;
     slot.problem = undefined;
     slot.okRound = round;
   }
@@ -753,49 +813,92 @@ export class DbApp {
       throw check;
     }
     if (this.gone(gen)) return;
-    const delay = slot.secondary
-      ? Math.min(SECONDARY_MAX, slot.secondary.delay * 2)
-      : SECONDARY_MIN;
-    slot.secondary = { due: this.monotonic() + delay, delay };
+    const delay =
+      slot.wait?.kind === 'secondary'
+        ? Math.min(SECONDARY_MAX, slot.wait.delay * 2)
+        : SECONDARY_MIN;
+    slot.wait = { kind: 'secondary', due: this.monotonic() + delay, delay };
     slot.problem = { code: 'secondary', status: err.status, until: this.now() + delay };
+  }
+
+  /** A 5xx on a timetable page of one station: that station waits, the others go on. */
+  holdStation(slot, err) {
+    const doubled =
+      slot.wait?.kind === 'server'
+        ? Math.min(STATION_RETRY_MAX, slot.wait.delay * 2)
+        : STATION_RETRY_MIN;
+    const delay = Math.min(
+      STATION_RETRY_MAX,
+      Math.max(doubled, finite(err.retryAfter) ? err.retryAfter : 0),
+    );
+    slot.wait = { kind: 'server', due: this.monotonic() + delay, delay };
+    slot.lastServer = err;
+    slot.problem = { code: 'server_station', status: err.status, until: this.now() + delay };
+  }
+
+  /** The planned hours a board needs: the hour before (late trains) to the end of the window. */
+  windowOf(now) {
+    return slicesBetween(
+      now - LOOKBACK_MINUTES * MINUTE,
+      now + this.config.lookaheadMinutes * MINUTE,
+    ).slice(0, MAX_PLAN_HOURS);
   }
 
   // --- Boards and Gladys --------------------------------------------------------------
 
   /** The board of a station now, from what is held; undefined when the timetable is incomplete. */
   boardOf(slot, now = this.now(), mono = this.monotonic()) {
-    if (!slot.eva) return undefined;
-    const needed = slicesBetween(now, now + this.config.lookaheadMinutes * MINUTE).slice(
-      0,
-      MAX_PLAN_HOURS,
-    );
+    return this.boardState(slot, now, mono).board;
+  }
+
+  /**
+   * { board } or { problem }: 'partial' (an hour not held), 'not_found' (DB
+   * has no plan for the current hour nor any later one of the window), 'dst'
+   * (the hour repeated by the autumn change: the times are ambiguous).
+   */
+  boardState(slot, now = this.now(), mono = this.monotonic()) {
+    if (!slot.eva) return {};
+    if (berlin(now).h === berlin(now - HOUR).h) return { problem: 'dst' };
+    const needed = this.windowOf(now);
     const plans = needed.map((s) => slot.plans.get(s.key));
-    if (plans.some((p) => !p || mono - p.at > PLAN_MAX_AGE)) return undefined;
+    if (plans.some((p) => !p || mono - p.at > PLAN_MAX_AGE)) return { problem: 'partial' };
+    const current = needed.findIndex((s) => s.key === sliceOf(now).key);
+    if (plans.slice(Math.max(0, current)).every((p) => p.missing)) {
+      return { problem: 'not_found' };
+    }
     const live = Boolean(slot.live && mono - slot.live.mono <= this.liveStale());
     const departures = departuresOf(
       plans.map((p) => p.stops),
       live ? slot.live.changes : undefined,
     );
-    return buildBoard(departures, {
-      now,
-      lookaheadMinutes: this.config.lookaheadMinutes,
-      thresholdMinutes: this.config.thresholdMinutes,
-      live,
-      filter: { lines: slot.lines, via: slot.via },
-    });
+    return {
+      board: buildBoard(departures, {
+        now,
+        lookaheadMinutes: this.config.lookaheadMinutes,
+        thresholdMinutes: this.config.thresholdMinutes,
+        live,
+        filter: { lines: slot.lines, via: slot.via },
+      }),
+    };
   }
 
-  async publishBoards(gen) {
+  async publishBoards(gen, { tick = false } = {}) {
     const states = [];
     const now = this.now();
     const mono = this.monotonic();
     for (const slot of this.slots) {
-      const board = this.boardOf(slot, now, mono);
+      const { board, problem } = this.boardState(slot, now, mono);
       if (!board) {
-        if (slot.eva && !slot.problem) slot.problem = { code: 'partial' };
+        // Nothing usable: the station does not count as read (the minute
+        // tick publishes only, it never changes the status).
+        if (problem && !tick) {
+          // The cause of a failed read stays the one shown.
+          if (!slot.problem) slot.problem = { code: problem };
+          slot.okRound = 0;
+        }
         continue;
       }
-      if (!board.live && !slot.problem) slot.problem = { code: 'stale' };
+      if (!board.live && !slot.problem && !tick) slot.problem = { code: 'stale' };
       states.push(
         ...statesOf(this.gladys, slot, board, {
           language: this.config.language,
@@ -1006,6 +1109,8 @@ export class DbApp {
         components: [heading, { type: 'text', text: t('widgetNoData', lang) }],
       };
     }
+    // The core keeps 2 texts per widget (the heading and one more): the data
+    // attribution rides in that second text, whatever the board holds.
     const components = [heading];
     const rows = board.rows.slice(0, 8);
     if (rows.length) {
@@ -1021,6 +1126,9 @@ export class DbApp {
           } else if (d.cancelled) {
             value = t('cancelled', lang);
             color = WIDGET_COLORS.DANGER;
+          } else if (!d.liveKnown) {
+            value = t('noLiveTrain', lang);
+            color = WIDGET_COLORS.NEUTRAL;
           } else if (delay > 0) {
             value = `+${delay} min`;
             color =
@@ -1044,8 +1152,9 @@ export class DbApp {
     } else {
       components.push({
         type: 'text',
-        text: t('none', lang, { minutes: this.config.lookaheadMinutes }),
+        text: `${t('none', lang, { minutes: this.config.lookaheadMinutes })} · ${t('attribution', lang)}`,
       });
+      return { ttl_seconds: 60, components };
     }
     components.push({
       type: 'text',
