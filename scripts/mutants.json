@@ -1,0 +1,254 @@
+[
+  {
+    "name": "one request at a time, REQUEST_GAP apart",
+    "file": "src/app.js",
+    "from": "if (wait > 0) await this.sleep(wait);",
+    "to": "if (false) await this.sleep(wait);"
+  },
+  {
+    "name": "a pause stops a queued request",
+    "file": "src/app.js",
+    "from": "if (this.pauseActive()) throw new DbError('paused');",
+    "to": "if (false) throw new DbError('paused');"
+  },
+  {
+    "name": "a refusal stops a queued request",
+    "file": "src/app.js",
+    "from": "if (!ignoreRefusal && this.isRefused()) throw new DbError('final_refused');",
+    "to": "if (false) throw new DbError('final_refused');"
+  },
+  {
+    "name": "a 429/5xx is decided before the next request of the lane",
+    "file": "src/app.js",
+    "from": "if (err?.code === 'rate_limited' || err?.code === 'server') this.notePause(err);",
+    "to": "if (false) this.notePause(err);"
+  },
+  {
+    "name": "a 401/403 of a timetable page is not a refusal by itself",
+    "file": "src/app.js",
+    "from": "if (err?.code === 'refused' && principal) this.noteRefused(err.status);",
+    "to": "if (err?.code === 'refused') this.noteRefused(err.status);"
+  },
+  {
+    "name": "the wait of a secondary 401/403 doubles",
+    "file": "src/app.js",
+    "from": "Math.min(SECONDARY_MAX, slot.secondary.delay * 2)",
+    "to": "SECONDARY_MIN"
+  },
+  {
+    "name": "a station under a secondary 401/403 waits",
+    "file": "src/app.js",
+    "from": "if (slot.secondary && slot.secondary.due > this.monotonic()) continue;",
+    "to": "if (false) continue;"
+  },
+  {
+    "name": "rounds an interval apart",
+    "file": "src/app.js",
+    "from": "due = this.lastRoundMono + wait;",
+    "to": "due = mono;"
+  },
+  {
+    "name": "a time of /data in the future is ignored",
+    "file": "src/app.js",
+    "from": "finite(last) && last <= now ?",
+    "to": "finite(last) ?"
+  },
+  {
+    "name": "a restart waits the rest of the interval",
+    "file": "src/app.js",
+    "from": "mono + Math.max(0, interval - (now - last))",
+    "to": "mono"
+  },
+  {
+    "name": "a changed config waits 30 s after the last round",
+    "file": "src/app.js",
+    "from": "? MIN_ROUND_GAP",
+    "to": "? 0"
+  },
+  {
+    "name": "the next round never during a pause",
+    "file": "src/app.js",
+    "from": "if (this.pause) due = Math.max(due, this.pause.due);",
+    "to": ""
+  },
+  {
+    "name": "a pause read back is capped at 6 h",
+    "file": "src/app.js",
+    "from": "Math.min(Math.max(0, pause.until - now), PAUSE_MAX)",
+    "to": "Math.max(0, pause.until - now)"
+  },
+  {
+    "name": "Retry-After bounded",
+    "file": "src/app.js",
+    "from": "Math.min(PAUSE_MAX, Math.max(PAUSE_MIN, asked))",
+    "to": "asked"
+  },
+  {
+    "name": "a pause is lifted by a good round",
+    "file": "src/app.js",
+    "from": "if (ok && this.pause) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "network failures space the rounds",
+    "file": "src/app.js",
+    "from": "interval * 2 ** Math.min(this.failures, 5)",
+    "to": "interval"
+  },
+  {
+    "name": "the refusal is kept in /data",
+    "file": "src/app.js",
+    "from": "    this.data.refused = this.refused;\n    this.clearRound();",
+    "to": "    this.data.refused = null;\n    this.clearRound();"
+  },
+  {
+    "name": "a test success lifts the refusal",
+    "file": "src/app.js",
+    "from": "        this.refused = undefined;\n        this.data.refused = null;",
+    "to": "        this.data.refused = null;"
+  },
+  {
+    "name": "the tag covers the API key",
+    "file": "src/app.js",
+    "from": "`${salt}\\u0000${clientId}\\u0000${apiKey}`",
+    "to": "`${salt}\\u0000${clientId}`"
+  },
+  {
+    "name": "the live data is used only while fresh",
+    "file": "src/app.js",
+    "from": "mono - slot.live.mono <= this.liveStale()",
+    "to": "true"
+  },
+  {
+    "name": "/data unreadable is never written",
+    "file": "src/app.js",
+    "from": "if (this.storeState !== 'ok') return false;",
+    "to": "if (false) return false;"
+  },
+  {
+    "name": "getConfig retries space out",
+    "file": "src/app.js",
+    "from": "Math.max(CONFIG_RETRY_MIN, this.configDelay * 2)",
+    "to": "CONFIG_RETRY_MIN"
+  },
+  {
+    "name": "no new station after the round budget",
+    "file": "src/app.js",
+    "from": "if (this.monotonic() > deadline) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "the station tried least recently first",
+    "file": "src/app.js",
+    "from": ".sort((a, b) => a.lastTried - b.lastTried)",
+    "to": ".sort(() => 0)"
+  },
+  {
+    "name": "a planned hour is refreshed after an hour",
+    "file": "src/app.js",
+    "from": "if (kept && this.monotonic() < kept.expires) continue;",
+    "to": "if (kept) continue;"
+  },
+  {
+    "name": "every station failing is not connected",
+    "file": "src/app.js",
+    "from": "return [read > 0, message];",
+    "to": "return [true, message];"
+  },
+  {
+    "name": "the test button at most every 30 s",
+    "file": "src/app.js",
+    "from": "mono - this.lastTest.mono < TEST_MIN_GAP",
+    "to": "false"
+  },
+  {
+    "name": "a late answer of an old generation is dropped",
+    "file": "src/app.js",
+    "from": "    if (this.gone(gen)) return;\n    slot.live = {",
+    "to": "    slot.live = {"
+  },
+  {
+    "name": "a hung /data read: the start goes on",
+    "file": "src/app.js",
+    "from": "const result = await this.bounded(this.loadStore(), STORE_WAIT);",
+    "to": "const result = await this.loadStore();"
+  },
+  {
+    "name": "an endless body is cut",
+    "file": "src/db/client.js",
+    "from": "    if (size > max) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "a too large Content-Length is refused before reading",
+    "file": "src/db/client.js",
+    "from": "if (Number.isFinite(length) && length > max) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "a non-XML 200 is a bad answer",
+    "file": "src/db/client.js",
+    "from": "if (type && !/xml/i.test(type)) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "403 is a refusal like 401",
+    "file": "src/db/client.js",
+    "from": "if (status === 401 || status === 403)",
+    "to": "if (status === 401)"
+  },
+  {
+    "name": "no delay without live data",
+    "file": "src/board.js",
+    "from": "delay: next && live ? delayOf(next) : undefined",
+    "to": "delay: next ? delayOf(next) : undefined"
+  },
+  {
+    "name": "a cancelled train is never the next one",
+    "file": "src/board.js",
+    "from": "const running = rows.filter((d) => !d.cancelled);",
+    "to": "const running = rows;"
+  },
+  {
+    "name": "no minutes published without a next departure",
+    "file": "src/devices.js",
+    "from": "if (board.nextIn !== undefined) {",
+    "to": "if (true) {"
+  },
+  {
+    "name": "a hidden stop is not a departure",
+    "file": "src/db/model.js",
+    "from": "if (hidden) return;",
+    "to": "if (false) return;"
+  },
+  {
+    "name": "a key without its Client ID is never sent",
+    "file": "src/config.js",
+    "from": "if (!config.clientId || !config.apiKey) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "no control character in a credential",
+    "file": "src/config.js",
+    "from": "/^[\\x21-\\x7e]{1,128}$/",
+    "to": "/^.{1,128}$/"
+  },
+  {
+    "name": "XML: no element after the root",
+    "file": "src/db/xml.js",
+    "from": "if (text.indexOf('<', i) >= 0) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "XML: element count bounded",
+    "file": "src/db/xml.js",
+    "from": "if (count > maxElements) throw new XmlError('too many elements');",
+    "to": ""
+  },
+  {
+    "name": "a start after a stop gets a live abort signal",
+    "file": "src/app.js",
+    "from": "if (this.abort.signal.aborted) this.abort = new AbortController();",
+    "to": ""
+  }
+]

@@ -1,67 +1,112 @@
-# Template de démonstration
+# Deutsche Bahn
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+Intégration non officielle, sans lien avec la Deutsche Bahn. Elle suit jusqu’à
+trois gares de la Deutsche Bahn (Allemagne) et donne, pour chacune, le
+prochain départ, son retard et les départs perturbés, plus un widget de
+tableau des départs. Lecture seule : rien n’est réservé ni modifié.
 
-## Ce que vous obtenez
+Les données viennent de l’API officielle **Timetables** de la DB API
+Marketplace, avec votre propre clé gratuite. L’intégration n’utilise pas
+l’API privée de l’application DB Navigator.
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+> Cette intégration a été écrite d’après la documentation de l’API et testée
+> avec un faux Gladys et une fausse API seulement : elle n’a jamais été testée
+> avec de vrais identifiants DB. Les retours des premiers utilisateurs sont
+> bienvenus sur le forum.
 
-## Configuration
+## 1. Obtenir votre clé gratuite
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+1. Créez un compte sur la
+   [DB API Marketplace](https://developers.deutschebahn.com/db-api-marketplace/apis/).
+2. Sous **Anwendungen** (applications), créez une application (un nom
+   suffit). Notez son **Client ID** et son **Client Secret** (la clé d’API).
+3. Dans le **Katalog**, ouvrez l’API **Timetables**, cliquez sur
+   **Abonnieren** (s’abonner), choisissez l’offre **Free** et votre
+   application.
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+## 2. Configurer
 
-## Actions
+- **Client ID** et **clé d’API (Client Secret)** : les deux sont
+  nécessaires ; avec un seul, rien n’est envoyé. Gardés par Gladys dans sa
+  base, jamais réaffichés, envoyés seulement à la DB API Marketplace (dans les
+  en-têtes `DB-Client-Id` et `DB-Api-Key`).
+- **Gare 1 à 3** : un nom (`Köln Hbf`), un numéro EVA (`8000207`) ou un code
+  DS100 (`KK`). Le bouton **Chercher une gare** liste les gares que DB connaît
+  pour un nom, avec leur numéro EVA et leur code DS100. Quand un nom
+  correspond à plusieurs gares, saisissez le numéro EVA.
+- **Lignes** (optionnel) : lignes ou catégories séparées par des virgules
+  (`RE 5, S 12, ICE`). **Direction** (optionnel) : une partie du nom d’une
+  gare par laquelle ou vers laquelle le train va (`Koblenz`).
+- **Intervalle de lecture** : 2 minutes par défaut (1 à 15).
+- **Départs affichés** : les 60 prochaines minutes par défaut (15 à 180).
+- **Perturbé à partir de** : 5 minutes de retard par défaut.
+- **Langue des valeurs** : anglais ou français.
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+**Tester les identifiants** envoie une requête à DB (au plus toutes les 30
+secondes) et dit si le Client ID et la clé d’API sont acceptés.
 
-## Scènes
+## 3. Les appareils
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+Chaque gare apparaît dans l’onglet **Découverte** une fois trouvée par DB
+(nom `DB <gare>`, avec les filtres entre parenthèses). Fonctionnalités, toutes
+en lecture seule :
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+| Fonctionnalité            | Valeur                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| Prochain départ           | texte, par exemple `14:05 RE 5 → Koblenz Hbf, voie 4 au lieu de 3, +4 min`        |
+| Prochain départ dans      | minutes jusqu’au prochain départ qui circule (retard compris)                     |
+| Retard du prochain départ | minutes, 0 à l’heure (données en direct seulement)                                |
+| Départs perturbés         | départs de la fenêtre supprimés ou en retard à partir du seuil (direct seulement) |
 
-## Tableau de bord
+L’heure affichée est l’heure prévue, heure locale de l’Allemagne. Un train
+supprimé n’est pas « le prochain départ » : c’est le suivant qui circule.
 
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+Quand aucun départ n’est dans la fenêtre, le texte le dit et **Prochain départ
+dans** et **Retard** ne sont pas mis à jour (leur dernière valeur reste ; aucun
+0 n’est publié pour « aucun »). Quand les données en direct de DB ont plus de
+10 minutes (2,5 intervalles si c’est plus long), le texte finit par « horaire
+prévu seulement » et le retard et le nombre de perturbations ne sont pas mis à
+jour.
 
-## Dépannage
+## 4. Tableau de bord
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+Le widget **Départs Deutsche Bahn** montre les 8 prochains départs d’une gare,
+avec le retard, la voie et les suppressions, et l’heure des données en direct.
+Il utilise ce que l’intégration a déjà lu : l’ouvrir n’envoie aucune requête à
+DB.
+
+## 5. Comment elle lit DB, et ses limites
+
+- À chaque intervalle, pour chaque gare : les changements en direct
+  (`/fchg`), une requête ; les horaires de chaque heure de la fenêtre
+  (`/plan`) une fois par heure ; la gare elle-même une fois (gardée d’un
+  redémarrage à l’autre).
+- Une requête à la fois au plus, espacées de 1,5 s (40 par minute au plus,
+  l’offre gratuite en permet 60). Un redémarrage, une reconnexion, un
+  enregistrement du formulaire ou le bouton de test ne font pas venir les
+  lectures plus tôt que l’intervalle (une gare changée attend 30 s après la
+  dernière lecture).
+- **HTTP 429 ou 5xx** : toutes les requêtes attendent (Retry-After quand DB le
+  donne, sinon 1 minute doublée jusqu’à 6 heures), même après un redémarrage.
+- **HTTP 401/403 sur la requête de gare** : les identifiants sont refusés.
+  L’intégration s’arrête et ne les réessaie pas d’elle-même, même après un
+  redémarrage ; saisissez d’autres identifiants ou appuyez sur **Tester les
+  identifiants** (un succès lève l’arrêt). Un 401/403 sur une page d’horaires
+  est d’abord vérifié sur la requête de gare : si les identifiants y sont
+  acceptés, seule cette gare attend (5 minutes, doublées jusqu’à 1 heure).
+- Aucune gare n’est commencée après 90 s dans un tour ; la gare laissée passe
+  en premier au tour suivant.
+- DB ne donne les horaires que pour un temps limité à l’avance (une heure sans plan est redemandée 15 minutes plus tard).
+
+## 6. Ce qui est gardé dans /data
+
+`/data/deutsche-bahn.json` : l’heure du dernier tour, une pause, un refus (8
+bits d’une empreinte salée des identifiants, rien de plus) et les gares
+trouvées (nom, numéro EVA, code DS100). Aucun identifiant. Quand le fichier ne
+peut pas être lu, il n’est pas écrasé et il est relu toutes les 10 secondes.
+
+## Données et licence
+
+Données d’horaires : Deutsche Bahn AG, via la DB API Marketplace, sous licence
+Creative Commons Attribution 4.0 (CC BY 4.0). Le widget affiche l’heure des
+données qu’il montre.

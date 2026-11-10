@@ -1,177 +1,369 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Deutsche Bahn",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Unofficial: Deutsche Bahn departures, delays and cancellations, official API with your key.",
+    "fr": "Non officiel : départs, retards et suppressions Deutsche Bahn, API officielle avec votre clé."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-deutsche-bahn:0.1.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-deutsche-bahn/main/cover.png",
+  "categories": ["transport"],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "DB API Marketplace application",
+        "fr": "Application DB API Marketplace"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "The departures come from the official Timetables API of Deutsche Bahn. Its free plan needs an account on the DB API Marketplace: create an application, subscribe it to the Timetables API (plan Free), then copy its Client ID and its API key (Client Secret) here. The integration sends at most 40 requests a minute (the plan allows 60). Data: Deutsche Bahn AG, CC BY 4.0.",
+        "fr": "Les départs viennent de l’API officielle Timetables de la Deutsche Bahn. Son offre gratuite demande un compte sur la DB API Marketplace : créez une application, abonnez-la à l’API Timetables (offre Free), puis copiez ici son Client ID et sa clé d’API (Client Secret). L’intégration envoie au plus 40 requêtes par minute (l’offre en permet 60). Données : Deutsche Bahn AG, CC BY 4.0."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/",
+          "label": {
+            "en": "DB API Marketplace",
+            "fr": "DB API Marketplace"
+          }
+        },
+        {
+          "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/product/timetables",
+          "label": {
+            "en": "The Timetables API",
+            "fr": "L’API Timetables"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "client_id",
+      "type": "secret",
+      "label": {
+        "en": "Client ID",
+        "fr": "Client ID"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "description": {
+        "en": "The Client ID of your DB API Marketplace application. Kept by Gladys in its database, never shown again, sent only to the DB API Marketplace.",
+        "fr": "Le Client ID de votre application DB API Marketplace. Gardé par Gladys dans sa base, jamais réaffiché, envoyé seulement à la DB API Marketplace."
+      },
+      "required": false
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+      "key": "api_key",
+      "type": "secret",
+      "label": {
+        "en": "API key (Client Secret)",
+        "fr": "Clé d’API (Client Secret)"
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
+      "description": {
+        "en": "The API key of the same application. Kept by Gladys in its database, never shown again, sent only to the DB API Marketplace.",
+        "fr": "La clé d’API de la même application. Gardée par Gladys dans sa base, jamais réaffichée, envoyée seulement à la DB API Marketplace."
+      },
+      "required": false
+    },
+    {
+      "key": "stations",
+      "type": "section",
+      "label": {
+        "en": "Stations",
+        "fr": "Gares"
+      },
+      "description": {
+        "en": "Up to three stations, each a device with its next departure, its delay and the disrupted departures. A station is a name (\"Köln Hbf\"), an EVA number (\"8000207\") or a DS100 code (\"KK\"): the Find a station button gives them. Optional filters: the lines (\"RE 5, S 12, ICE\") and a station the train goes through or to (\"Koblenz\").",
+        "fr": "Jusqu’à trois gares, chacune un appareil avec son prochain départ, son retard et les départs perturbés. Une gare est un nom (« Köln Hbf »), un numéro EVA (« 8000207 ») ou un code DS100 (« KK ») : le bouton Chercher une gare les donne. Filtres optionnels : les lignes (« RE 5, S 12, ICE ») et une gare par laquelle ou vers laquelle le train va (« Koblenz »)."
+      }
+    },
+    {
+      "key": "station_1",
+      "type": "string",
+      "label": {
+        "en": "Station 1",
+        "fr": "Gare 1"
+      },
+      "placeholder": {
+        "en": "Köln Hbf",
+        "fr": "Köln Hbf"
+      },
+      "required": false
+    },
+    {
+      "key": "lines_1",
+      "type": "string",
+      "label": {
+        "en": "Lines of station 1",
+        "fr": "Lignes de la gare 1"
+      },
+      "description": {
+        "en": "Optional, separated by commas: a line (RE 5, S 12) or a category (ICE, IC, RE).",
+        "fr": "Optionnel, séparées par des virgules : une ligne (RE 5, S 12) ou une catégorie (ICE, IC, RE)."
+      },
+      "placeholder": {
+        "en": "RE 5, ICE",
+        "fr": "RE 5, ICE"
+      },
+      "required": false
+    },
+    {
+      "key": "via_1",
+      "type": "string",
+      "label": {
+        "en": "Direction of station 1",
+        "fr": "Direction de la gare 1"
+      },
+      "description": {
+        "en": "Optional: only the trains that go through or to this station (part of its name).",
+        "fr": "Optionnel : seulement les trains qui passent par cette gare ou y vont (une partie de son nom)."
+      },
+      "placeholder": {
+        "en": "Koblenz",
+        "fr": "Koblenz"
+      },
+      "required": false
+    },
+    {
+      "key": "station_2",
+      "type": "string",
+      "label": {
+        "en": "Station 2",
+        "fr": "Gare 2"
+      },
+      "placeholder": {
+        "en": "Köln Hbf",
+        "fr": "Köln Hbf"
+      },
+      "required": false
+    },
+    {
+      "key": "lines_2",
+      "type": "string",
+      "label": {
+        "en": "Lines of station 2",
+        "fr": "Lignes de la gare 2"
+      },
+      "description": {
+        "en": "Optional, separated by commas: a line (RE 5, S 12) or a category (ICE, IC, RE).",
+        "fr": "Optionnel, séparées par des virgules : une ligne (RE 5, S 12) ou une catégorie (ICE, IC, RE)."
+      },
+      "placeholder": {
+        "en": "RE 5, ICE",
+        "fr": "RE 5, ICE"
+      },
+      "required": false
+    },
+    {
+      "key": "via_2",
+      "type": "string",
+      "label": {
+        "en": "Direction of station 2",
+        "fr": "Direction de la gare 2"
+      },
+      "description": {
+        "en": "Optional: only the trains that go through or to this station (part of its name).",
+        "fr": "Optionnel : seulement les trains qui passent par cette gare ou y vont (une partie de son nom)."
+      },
+      "placeholder": {
+        "en": "Koblenz",
+        "fr": "Koblenz"
+      },
+      "required": false
+    },
+    {
+      "key": "station_3",
+      "type": "string",
+      "label": {
+        "en": "Station 3",
+        "fr": "Gare 3"
+      },
+      "placeholder": {
+        "en": "Köln Hbf",
+        "fr": "Köln Hbf"
+      },
+      "required": false
+    },
+    {
+      "key": "lines_3",
+      "type": "string",
+      "label": {
+        "en": "Lines of station 3",
+        "fr": "Lignes de la gare 3"
+      },
+      "description": {
+        "en": "Optional, separated by commas: a line (RE 5, S 12) or a category (ICE, IC, RE).",
+        "fr": "Optionnel, séparées par des virgules : une ligne (RE 5, S 12) ou une catégorie (ICE, IC, RE)."
+      },
+      "placeholder": {
+        "en": "RE 5, ICE",
+        "fr": "RE 5, ICE"
+      },
+      "required": false
+    },
+    {
+      "key": "via_3",
+      "type": "string",
+      "label": {
+        "en": "Direction of station 3",
+        "fr": "Direction de la gare 3"
+      },
+      "description": {
+        "en": "Optional: only the trains that go through or to this station (part of its name).",
+        "fr": "Optionnel : seulement les trains qui passent par cette gare ou y vont (une partie de son nom)."
+      },
+      "placeholder": {
+        "en": "Koblenz",
+        "fr": "Koblenz"
+      },
+      "required": false
+    },
+    {
+      "key": "options",
+      "type": "section",
+      "label": {
+        "en": "Options",
+        "fr": "Options"
+      },
+      "description": {
+        "en": "The live changes are read every interval (one request per station, the timetable once an hour). Delays and disruptions are published only with live data of the last 10 minutes.",
+        "fr": "Les changements en direct sont lus à chaque intervalle (une requête par gare, les horaires une fois par heure). Retards et perturbations ne sont publiés qu’avec des données en direct des 10 dernières minutes."
+      }
+    },
+    {
+      "key": "poll_minutes",
+      "type": "number",
+      "label": {
+        "en": "Read interval (minutes)",
+        "fr": "Intervalle de lecture (minutes)"
+      },
+      "required": false,
+      "default": 2,
+      "min": 1,
+      "max": 15
+    },
+    {
+      "key": "lookahead_minutes",
+      "type": "number",
+      "label": {
+        "en": "Departures shown (next minutes)",
+        "fr": "Départs affichés (minutes à venir)"
+      },
+      "required": false,
+      "default": 60,
+      "min": 15,
       "max": 180
     },
     {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
-      "required": false,
-      "default": "celsius",
-      "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
-      ]
-    },
-    {
-      "key": "poll_frequency",
+      "key": "delay_threshold",
       "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
-      "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+      "label": {
+        "en": "Disrupted from (minutes late)",
+        "fr": "Perturbé à partir de (minutes de retard)"
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": 5,
+      "min": 1,
+      "max": 60
+    },
+    {
+      "key": "language",
+      "type": "select",
+      "label": {
+        "en": "Language of the values",
+        "fr": "Langue des valeurs"
+      },
+      "description": {
+        "en": "Language of the feature names and of the published texts.",
+        "fr": "Langue des noms de fonctionnalités et des textes publiés."
+      },
+      "required": false,
+      "default": "en",
+      "options": [
+        {
+          "value": "en",
+          "label": {
+            "en": "English",
+            "fr": "Anglais"
+          }
+        },
+        {
+          "value": "fr",
+          "label": {
+            "en": "French",
+            "fr": "Français"
+          }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
+      "key": "test_connection",
+      "timeout_seconds": 45,
+      "label": {
+        "en": "Test the credentials",
+        "fr": "Tester les identifiants"
+      },
+      "description": {
+        "en": "Sends one request to the Timetables API (at most every 30 s) and tells whether DB accepts the Client ID and the API key. A success lifts a refusal.",
+        "fr": "Envoie une requête à l’API Timetables (au plus toutes les 30 s) et dit si DB accepte le Client ID et la clé d’API. Un succès lève un refus."
+      }
     },
     {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
-    }
-  ],
-  "scene_triggers": [
-    {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "search_station",
+      "timeout_seconds": 45,
+      "label": {
+        "en": "Find a station",
+        "fr": "Chercher une gare"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "The stations DB knows for a name, with their EVA number and DS100 code.",
+        "fr": "Les gares que DB connaît pour un nom, avec leur numéro EVA et leur code DS100."
       },
       "fields": [
         {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
-        }
-      ],
-      "variables": [
-        {
-          "key": "target",
+          "key": "query",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
-        }
-      ]
-    }
-  ],
-  "scene_actions": [
-    {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
-      },
-      "timeout_seconds": 15,
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
+          "label": {
+            "en": "Name, EVA number or DS100 code",
+            "fr": "Nom, numéro EVA ou code DS100"
+          },
+          "placeholder": {
+            "en": "Köln",
+            "fr": "Köln"
+          },
           "required": true
-        }
-      ],
-      "outputs": [
-        {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "departures",
+      "label": {
+        "en": "Deutsche Bahn departures",
+        "fr": "Départs Deutsche Bahn"
       },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "description": {
+        "en": "The next departures of a watched station, with delays and platforms.",
+        "fr": "Les prochains départs d’une gare suivie, avec retards et voies."
+      },
+      "icon": "train-front",
+      "settings": [
+        {
+          "key": "station",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Station",
+            "fr": "Gare"
+          },
+          "required": true
+        }
+      ]
     }
   ]
 }

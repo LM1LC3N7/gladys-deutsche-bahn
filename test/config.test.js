@@ -1,33 +1,59 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeConfig, DEFAULT_CONFIG } from '../src/config.js';
+import {
+  bounded,
+  credentialProblem,
+  normalizeConfig,
+  parseLines,
+  stationInput,
+} from '../src/config.js';
 
-test('normalizeConfig returns the defaults when called with no argument', () => {
-  assert.deepEqual(normalizeConfig(), DEFAULT_CONFIG);
+test('defaults and bounds of the numbers (an empty field is the default, never 0)', () => {
+  const c = normalizeConfig({});
+  assert.equal(c.pollMinutes, 2);
+  assert.equal(c.lookaheadMinutes, 60);
+  assert.equal(c.thresholdMinutes, 5);
+  assert.equal(c.language, 'en');
+  const range = { default: 2, min: 1, max: 15 };
+  assert.equal(bounded('', range), 2);
+  assert.equal(bounded(null, range), 2);
+  assert.equal(bounded('0', range), 1);
+  assert.equal(bounded(99, range), 15);
+  assert.equal(bounded(2.5, range), 2);
+  assert.equal(bounded('abc', range), 2);
 });
 
-test('normalizeConfig keeps user values over the defaults', () => {
-  const config = normalizeConfig({ latitude: 45.5, longitude: -73.6, unit: 'fahrenheit' });
-  assert.equal(config.latitude, 45.5);
-  assert.equal(config.longitude, -73.6);
-  assert.equal(config.unit, 'fahrenheit');
+test('credentials: both or nothing, never a control character nor a space', () => {
+  assert.equal(credentialProblem(normalizeConfig({})), 'missing');
+  assert.equal(credentialProblem(normalizeConfig({ api_key: 'k' })), 'half');
+  assert.equal(credentialProblem(normalizeConfig({ client_id: 'c' })), 'half');
+  assert.equal(
+    credentialProblem(normalizeConfig({ client_id: 'c', api_key: 'a\r\nX-Evil: 1' })),
+    'malformed',
+  );
+  assert.equal(credentialProblem(normalizeConfig({ client_id: 'c d', api_key: 'k' })), 'malformed');
+  assert.equal(credentialProblem(normalizeConfig({ client_id: ' c ', api_key: 'k' })), undefined);
 });
 
-test('normalizeConfig coerces numeric strings coming from a form', () => {
-  const config = normalizeConfig({ latitude: '48.8', longitude: '2.3', poll_frequency: '600' });
-  assert.equal(config.latitude, 48.8);
-  assert.equal(config.longitude, 2.3);
-  assert.equal(config.poll_frequency, 600);
-  assert.equal(typeof config.poll_frequency, 'number');
-});
-
-test('normalizeConfig falls back to the default for a missing numeric field', () => {
-  const config = normalizeConfig({ unit: 'celsius' });
-  assert.equal(config.poll_frequency, DEFAULT_CONFIG.poll_frequency);
-});
-
-test('GLADYS_PREFER_LOCAL defaults to true and only an explicit false disables it', () => {
-  assert.equal(normalizeConfig().GLADYS_PREFER_LOCAL, true);
-  assert.equal(normalizeConfig({ GLADYS_PREFER_LOCAL: true }).GLADYS_PREFER_LOCAL, true);
-  assert.equal(normalizeConfig({ GLADYS_PREFER_LOCAL: false }).GLADYS_PREFER_LOCAL, false);
+test('stations: up to three, inputs cleaned, filters parsed', () => {
+  const c = normalizeConfig({
+    station_1: '  Köln   Hbf ',
+    lines_1: 'RE 5, s1; ICE,, bad line!',
+    via_1: ' Koblenz ',
+    station_2: '',
+    station_3: '8000105',
+    station_4: 'ignored',
+  });
+  assert.deepEqual(
+    c.stations.map((s) => [s.slot, s.input]),
+    [
+      [1, 'Köln Hbf'],
+      [3, '8000105'],
+    ],
+  );
+  assert.deepEqual(c.stations[0].lines, ['RE5', 'S1', 'ICE']);
+  assert.equal(c.stations[0].via, 'koblenz');
+  assert.deepEqual(parseLines(''), []);
+  for (const bad of ['a/b', '..', '.', 'x\ny', 'x'.repeat(81)])
+    assert.equal(stationInput(bad), '', bad);
 });

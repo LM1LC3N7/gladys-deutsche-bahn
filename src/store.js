@@ -1,0 +1,96 @@
+// -----------------------------------------------------------------------------
+// What /data keeps across restarts (/data/deutsche-bahn.json, mode 0600):
+// the time of the last round (a restart never reads sooner than the
+// interval), the pause after a 429/5xx, the refused credentials (8 bits of a
+// salted hash, never a credential), and the stations already resolved (input
+// -> EVA number and name, no secret). Written through a temporary file and a
+// rename, one save after the other. A missing file is empty; a file that
+// cannot be read (EACCES, EIO, too large) is NOT empty: never overwritten.
+// -----------------------------------------------------------------------------
+
+import { open, readFile, rename } from 'node:fs/promises';
+import { join } from 'node:path';
+
+const MAX_BYTES = 256 * 1024;
+
+export class StoreUnreadable extends Error {
+  constructor(reason) {
+    super(`/data unreadable (${reason})`);
+    this.name = 'StoreUnreadable';
+  }
+}
+
+export class FileStore {
+  constructor({ dir = process.env.DATA_DIR || '/data', name = 'deutsche-bahn.json' } = {}) {
+    this.path = join(dir, name);
+    this.queue = Promise.resolve();
+  }
+
+  /** The saved object; {} when the file does not exist; throws when it cannot be read. */
+  async load() {
+    let text;
+    try {
+      text = await readFile(this.path, 'utf8');
+    } catch (err) {
+      if (err?.code === 'ENOENT') return {};
+      throw new StoreUnreadable(err?.code ?? 'error');
+    }
+    if (text.length > MAX_BYTES) throw new StoreUnreadable('too large');
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // A torn or foreign file: nothing usable in it, but it is ours to
+      // replace only once read (it is read, so it is not "unreadable").
+      return {};
+    }
+    return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+  }
+
+  /** Saves after the previous save (the last one always lands last). */
+  save(data) {
+    const write = async () => {
+      const tmp = `${this.path}.tmp`;
+      const handle = await open(tmp, 'w', 0o600);
+      try {
+        await handle.writeFile(JSON.stringify(data), 'utf8');
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      await rename(tmp, this.path);
+    };
+    const job = this.queue.then(write, write);
+    this.queue = job.catch(() => {});
+    return job;
+  }
+
+  flush() {
+    return this.queue;
+  }
+}
+
+/** The same in memory (tests): `fail`, `hang` and `unreadable` simulate a bad volume. */
+export function createMemoryStore(initial = {}) {
+  const store = {
+    data: structuredClone(initial),
+    saves: 0,
+    loads: 0,
+    unreadable: false,
+    hang: false,
+    failSave: false,
+    async load() {
+      store.loads += 1;
+      if (store.hang) return new Promise(() => {});
+      if (store.unreadable) throw new StoreUnreadable('EIO');
+      return structuredClone(store.data);
+    },
+    async save(next) {
+      if (store.failSave) throw new Error('EROFS');
+      store.saves += 1;
+      store.data = structuredClone(next);
+    },
+    flush: async () => {},
+  };
+  return store;
+}

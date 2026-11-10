@@ -1,45 +1,110 @@
 // -----------------------------------------------------------------------------
-// Integration configuration.
-//
-// The configuration is filled in by the user in Gladys, from the `config_schema`
-// declared in `gladys-assistant-integration.json`. The SDK fetches it for you
-// (`gladys.getConfig()`) and notifies you of every change through
-// `gladys.onConfigUpdated()`.
-//
-// This module only provides defaults and normalizes the received object, so the
-// rest of the code never has to deal with `undefined`.
+// The configuration of the form, normalized: the two credentials of the DB
+// API Marketplace application, the language, the pace, and up to three
+// stations, each with its optional line and direction filters. Nothing here
+// talks to the network.
 // -----------------------------------------------------------------------------
 
-// Defaults: they MUST stay consistent with the `default` values declared in the
-// `config_schema` of the manifest.
-export const DEFAULT_CONFIG = {
-  latitude: 48.8566, // Paris
-  longitude: 2.3522,
-  unit: 'celsius', // 'celsius' | 'fahrenheit'
-  // Seconds between two reads of the polled sensors. Gladys polls at most once
-  // a minute: slower intervals are applied by skipping polls (see
-  // createPoller in src/devices/index.js).
-  poll_frequency: 300,
-  // Reserved key (NOT in config_schema): because the manifest declares both
-  // 'local' and 'cloud' in its `transports` field, Gladys shows a standard
-  // "Prefer the local connection" toggle and sends the user's choice here.
-  // Read-only for the integration; defaults to true.
-  GLADYS_PREFER_LOCAL: true,
-};
+import {
+  LANGUAGES,
+  LOOKAHEAD_MINUTES,
+  MAX_STATIONS,
+  POLL_MINUTES,
+  THRESHOLD_MINUTES,
+} from './constants.js';
+
+/** Control characters (CR, LF, tab included): never in a header, an id or a path. */
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+
+/** A credential: printable ASCII without space, 1 to 128 characters. */
+export const isCredential = (value) =>
+  typeof value === 'string' && /^[\x21-\x7e]{1,128}$/.test(value);
+
+function text(value, max) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  return trimmed.length <= max && !CONTROL.test(trimmed) ? trimmed : '';
+}
+
+/** A whole number in its bounds, the default when missing or not a whole number. */
+export function bounded(value, { default: fallback, min, max }) {
+  if (value === null || value === undefined || value === '') {
+    return fallback;
+  }
+  const number = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isInteger(number)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, number));
+}
+
+/** Lines of a filter: "RE 5, S1, ICE" -> ["RE5", "S1", "ICE"] (spaces dropped, upper case). */
+export function parseLines(value) {
+  const raw = text(value, 200);
+  if (!raw) {
+    return [];
+  }
+  const lines = raw
+    .split(/[,;]/)
+    .map((part) => part.replace(/\s+/g, '').toUpperCase())
+    .filter((part) => /^[A-Z0-9-]{1,12}$/.test(part));
+  return [...new Set(lines)].slice(0, 20);
+}
 
 /**
- * Merge the user config with the defaults.
- * @param {Record<string, unknown>} raw config returned by the SDK
+ * The station input: an EVA number (6 to 9 digits), a DS100 code or a name.
+ * Normalized for the cache key; the path segment is URL-encoded later.
  */
-export function normalizeConfig(raw = {}) {
+export function stationInput(value) {
+  const raw = text(value, 80).replace(/\s+/g, ' ');
+  return raw.includes('/') || raw === '.' || raw === '..' ? '' : raw;
+}
+
+export function normalizeConfig(config = {}) {
+  const c = config && typeof config === 'object' ? config : {};
+  const clientId = typeof c.client_id === 'string' ? c.client_id.trim() : '';
+  const apiKey = typeof c.api_key === 'string' ? c.api_key.trim() : '';
+  const stations = [];
+  for (let slot = 1; slot <= MAX_STATIONS; slot += 1) {
+    const input = stationInput(c[`station_${slot}`]);
+    if (!input) {
+      continue;
+    }
+    stations.push({
+      slot,
+      input,
+      lines: parseLines(c[`lines_${slot}`]),
+      via: text(c[`via_${slot}`], 60).toLowerCase(),
+    });
+  }
   return {
-    ...DEFAULT_CONFIG,
-    ...raw,
-    // Force the types: config may arrive as strings from a form.
-    latitude: Number(raw.latitude ?? DEFAULT_CONFIG.latitude),
-    longitude: Number(raw.longitude ?? DEFAULT_CONFIG.longitude),
-    poll_frequency: Number(raw.poll_frequency ?? DEFAULT_CONFIG.poll_frequency),
-    // The preference is a boolean; anything but an explicit false means true.
-    GLADYS_PREFER_LOCAL: raw.GLADYS_PREFER_LOCAL !== false,
+    clientId,
+    apiKey,
+    // Only well-formed values ever reach a header: anything else is "missing".
+    credentialsValid: isCredential(clientId) && isCredential(apiKey),
+    language: LANGUAGES.includes(c.language) ? c.language : 'en',
+    pollMinutes: bounded(c.poll_minutes, POLL_MINUTES),
+    lookaheadMinutes: bounded(c.lookahead_minutes, LOOKAHEAD_MINUTES),
+    thresholdMinutes: bounded(c.delay_threshold, THRESHOLD_MINUTES),
+    stations,
   };
 }
+
+/** What a credential problem is: undefined when both are there and well-formed. */
+export function credentialProblem(config) {
+  if (!config.clientId && !config.apiKey) {
+    return 'missing';
+  }
+  if (!config.clientId || !config.apiKey) {
+    // A key without its Client ID (or the reverse) is never sent.
+    return 'half';
+  }
+  return config.credentialsValid ? undefined : 'malformed';
+}
+
+/** The part of the config that changes what is read (not the credentials). */
+export const readingKey = (config) =>
+  JSON.stringify([config.pollMinutes, config.lookaheadMinutes, config.stations]);
