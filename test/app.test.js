@@ -29,11 +29,12 @@ test('first round: station resolved, two planned hours, the live changes, four s
     s.db.calls.map((c) => c.path),
     [
       '/station/Köln Hbf',
-      '/plan/8000207/261110/12',
-      '/plan/8000207/261110/13',
       '/plan/8000207/261110/14',
       '/plan/8000207/261110/15',
       '/fchg/8000207',
+      // The hours before last: optional.
+      '/plan/8000207/261110/12',
+      '/plan/8000207/261110/13',
     ],
   );
   assert.equal(s.last(F('next')), '14:05 RE 5 → Koblenz Hbf, pl. 4 instead of 3, +4 min');

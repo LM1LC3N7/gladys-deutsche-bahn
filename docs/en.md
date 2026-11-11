@@ -92,8 +92,11 @@ already read: opening it sends no request to DB.
 ## 5. How it reads DB, and its limits
 
 - Every interval, for each station: the live changes (`/fchg`), one request;
-  the timetable of each hour of the window and of the two hours before (`/plan`)
-  once an hour; the station itself once (kept across restarts).
+  the timetable of each hour of the window (`/plan`) once an hour; the station
+  itself once (kept across restarts). The two hours before are read last,
+  once (a past timetable does not change), and are optional: an error on them
+  (asked again 15 minutes later) never stops the station from being read;
+  only a train still late from then may be missed.
 - At most one request at a time, 1.5 s apart (40 a minute at most, the free
   plan allows 60). A restart, a reconnection, a save of the form or the test
   button does not make the reads come sooner than the interval (a changed

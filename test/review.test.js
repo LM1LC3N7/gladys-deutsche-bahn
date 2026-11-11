@@ -229,10 +229,10 @@ test('m4: at midnight, the hours of the next German day are asked', async () => 
   await s.run();
   const plans = s.db.calls.filter((c) => c.path.startsWith('/plan/')).map((c) => c.path);
   assert.deepEqual(plans, [
-    '/plan/8000207/261110/21',
-    '/plan/8000207/261110/22',
     '/plan/8000207/261110/23',
     '/plan/8000207/261111/00',
+    '/plan/8000207/261110/21',
+    '/plan/8000207/261110/22',
   ]);
   assert.match(s.last(F('next')), /^00:05 RE 5/);
   await s.app.stop();
@@ -351,5 +351,57 @@ test('n2: a train planned two hours before and late still shows', async () => {
   s.db.changes[EVA] = [...defaultChanges(), '<s id="very-late"><dp ct="2611101410"/></s>'];
   await s.run();
   assert.equal(s.last(F('next')), '12:50 RE 7 → Krefeld Hbf, pl. 6, +80 min');
+  await s.app.stop();
+});
+
+for (const [name, answer] of [
+  ['400', () => new Response('', { status: 400 })],
+  ['410', () => new Response('', { status: 410 })],
+  ['403', () => new Response('', { status: 403 })],
+  ['503', () => new Response('', { status: 503 })],
+  ['a timeout', () => 'timeout'],
+  ['unreadable XML', () => xml('<timetable><s')],
+]) {
+  test(`I9: an hour before answering ${name} never stops the station`, async () => {
+    const s = await setup();
+    s.db.override = (path) => (path === '/plan/8000207/261110/12' ? answer() : undefined);
+    await s.run();
+    assert.equal(fchg(s), 1);
+    assert.equal(s.last(F('next')), '14:05 RE 5 → Koblenz Hbf, pl. 4 instead of 3, +4 min');
+    assert.equal(s.status().connected, true);
+    assert.equal(s.app.pause, undefined, 'no pause of all');
+    assert.equal(s.app.slots[0].wait, undefined, 'the station does not wait');
+    assert.equal(s.db.count('/station/8000207'), 0, 'no check of the credentials');
+    // Asked again 15 min later, the station read every interval meanwhile.
+    await s.advance(14 * MINUTE);
+    assert.equal(s.db.count('/plan/8000207/261110/12'), 1);
+    assert.ok(fchg(s) >= 7);
+    await s.advance(2 * MINUTE);
+    assert.equal(s.db.count('/plan/8000207/261110/12'), 2);
+    await s.app.stop();
+  });
+}
+
+test('I9: one warning per outage of an hour before, the rest in debug', async () => {
+  const s = await setup();
+  s.db.override = (path) =>
+    path.startsWith('/plan/8000207/261110/1') && path.endsWith('2') ? 'timeout' : undefined;
+  await s.run();
+  await s.advance(40 * MINUTE);
+  const warnings = s.lines.filter((l) => l.includes('an hour before not read'));
+  assert.ok(warnings.length >= 2, 'tried again');
+  assert.equal(s.app.slots[0].beforeWarned, true);
+  await s.app.stop();
+});
+
+test('n5: a past hour once held is not read again while it stays in the window', async () => {
+  const s = await setup();
+  await s.run();
+  await s.advance(55 * MINUTE);
+  assert.equal(s.db.count('/plan/8000207/261110/12'), 1);
+  assert.equal(s.db.count('/plan/8000207/261110/13'), 1);
+  // 15:06: hour 14, read as the current hour, is now in the past: kept.
+  await s.advance(10 * MINUTE);
+  assert.equal(s.db.count('/plan/8000207/261110/14'), 1);
   await s.app.stop();
 });

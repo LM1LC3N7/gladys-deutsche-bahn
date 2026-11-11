@@ -266,8 +266,8 @@
   {
     "name": "I3: no plan for the window is not_found",
     "file": "src/app.js",
-    "from": "if (plans.slice(Math.max(0, current)).every((p) => p.missing)) {",
-    "to": "if (false) {"
+    "from": "if (plans.every((p) => p.missing)) return { problem: 'not_found' };",
+    "to": ""
   },
   {
     "name": "I4: a 5xx of one station's page holds that station only",
@@ -412,5 +412,23 @@
     "file": "src/constants.js",
     "from": "export const LOOKBACK_MINUTES = 120;",
     "to": "export const LOOKBACK_MINUTES = 60;"
+  },
+  {
+    "name": "I9: an error on an hour before never stops the station",
+    "file": "src/app.js",
+    "from": "        if (code === 'rate_limited' || code === 'paused' || code === 'final_refused') throw err;",
+    "to": "        throw err;"
+  },
+  {
+    "name": "I9: only the current hour and the later ones are required",
+    "file": "src/app.js",
+    "from": "return { before: needed.slice(0, cut), required: needed.slice(cut) };",
+    "to": "return { before: [], required: needed };"
+  },
+  {
+    "name": "n5: a past hour once held is not read again",
+    "file": "src/app.js",
+    "from": "if (kept && (!kept.missing || this.monotonic() < kept.expires)) continue;",
+    "to": "if (kept && this.monotonic() < kept.expires) continue;"
   }
 ]

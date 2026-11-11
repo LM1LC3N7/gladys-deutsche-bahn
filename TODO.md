@@ -24,9 +24,12 @@
       coordinator (r2): a train absent from a fresh `/fchg` is on time
       (delay 0); "timetable only" only when `/fchg` is not fresh.
 - [ ] An empty `/fchg` (no `<s>`) for a station with many planned departures
-      may be a gateway failure served in 200: today read as "nothing
-      changed" (on time). A guard (e.g. 10 departures planned, empty
-      `/fchg` = not fresh) is to weigh against a quiet night station.
+      may be a gateway failure served in 200. Decision for v1 (review r3):
+      read as "nothing changed" (on time), no guard. A threshold would blank
+      the delays of a quiet station at night, and nothing tells us yet that
+      DB serves an empty 200 on failure. To revisit with the real API (the
+      size of `/fchg` at Köln Hbf, 850+ stops by day, makes an empty answer
+      for a big station easy to spot in the logs).
 - [ ] How far back DB still serves `/plan` (the two hours before are read
       for the late trains; a 404 there is an empty hour).
 - [ ] The size of `/fchg` for the biggest stations (limit: 4 MiB) and of a

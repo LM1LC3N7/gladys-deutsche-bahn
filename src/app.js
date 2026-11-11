@@ -724,7 +724,8 @@ export class DbApp {
     for (const key of slot.plans.keys()) {
       if (!keys.has(key)) slot.plans.delete(key);
     }
-    for (const slice of needed) {
+    const { before, required } = this.splitWindow(needed, now);
+    for (const slice of required) {
       const kept = slot.plans.get(slice.key);
       if (kept && this.monotonic() < kept.expires) continue;
       let text;
@@ -766,6 +767,59 @@ export class DbApp {
     slot.wait = undefined;
     slot.problem = undefined;
     slot.okRound = round;
+    await this.readBefore(gen, slot, before);
+  }
+
+  /**
+   * The hours before the current one, read last and optional: they only add
+   * the rare train still late from then. Any answer but a 429 (a pause of all)
+   * leaves the hour empty, asked again 15 min later; the station is read all
+   * the same. A past plan does not change: once held, it is kept until it
+   * leaves the window.
+   */
+  async readBefore(gen, slot, before) {
+    for (const slice of before) {
+      const kept = slot.plans.get(slice.key);
+      if (kept && (!kept.missing || this.monotonic() < kept.expires)) continue;
+      try {
+        const text = await this.request(gen, (c, signal) =>
+          c.plan(slot.eva, slice.date, slice.hour, signal),
+        );
+        if (this.gone(gen)) return;
+        const mono = this.monotonic();
+        slot.plans.set(slice.key, {
+          stops: parse(parseTimetable, text),
+          at: mono,
+          expires: Infinity,
+        });
+        slot.beforeWarned = false;
+      } catch (err) {
+        const code = err?.code;
+        if (this.gone(gen) || code === 'aborted') return;
+        if (code === 'rate_limited' || code === 'paused' || code === 'final_refused') throw err;
+        const mono = this.monotonic();
+        slot.plans.set(slice.key, {
+          stops: new Map(),
+          missing: true,
+          at: mono,
+          expires: mono + PLAN_EMPTY_RETRY,
+        });
+        if (code !== 'not_found') {
+          // One warning per outage; the rest in debug.
+          const line = `Station ${slot.slot}: an hour before not read (${code ?? 'error'}), ignored`;
+          if (slot.beforeWarned) this.log.debug?.(line);
+          else this.log.warn(line);
+          slot.beforeWarned = true;
+        }
+      }
+    }
+  }
+
+  /** The hours before the current one (optional) and the current one and later (required). */
+  splitWindow(needed, now) {
+    const index = needed.findIndex((s) => s.key === sliceOf(now).key);
+    const cut = Math.max(0, index);
+    return { before: needed.slice(0, cut), required: needed.slice(cut) };
   }
 
   async resolve(gen, slot) {
@@ -860,12 +914,14 @@ export class DbApp {
   boardState(slot, now = this.now(), mono = this.monotonic()) {
     if (!slot.eva) return {};
     if (berlin(now).h === berlin(now - HOUR).h) return { problem: 'dst' };
-    const needed = this.windowOf(now);
-    const plans = needed.map((s) => slot.plans.get(s.key));
+    const { before, required } = this.splitWindow(this.windowOf(now), now);
+    const plans = required.map((s) => slot.plans.get(s.key));
     if (plans.some((p) => !p || mono - p.at > PLAN_MAX_AGE)) return { problem: 'partial' };
-    const current = needed.findIndex((s) => s.key === sliceOf(now).key);
-    if (plans.slice(Math.max(0, current)).every((p) => p.missing)) {
-      return { problem: 'not_found' };
+    if (plans.every((p) => p.missing)) return { problem: 'not_found' };
+    // The hours before only add what they hold (a late train); never required.
+    for (const slice of before) {
+      const held = slot.plans.get(slice.key);
+      if (held && !held.missing) plans.push(held);
     }
     const live = Boolean(slot.live && mono - slot.live.mono <= this.liveStale());
     const departures = departuresOf(

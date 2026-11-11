@@ -97,9 +97,12 @@ DB.
 ## 5. Comment elle lit DB, et ses limites
 
 - À chaque intervalle, pour chaque gare : les changements en direct
-  (`/fchg`), une requête ; les horaires de chaque heure de la fenêtre et de
-  des deux heures précédentes (`/plan`) une fois par heure ; la gare elle-même une fois (gardée d’un
-  redémarrage à l’autre).
+  (`/fchg`), une requête ; les horaires de chaque heure de la fenêtre
+  (`/plan`) une fois par heure ; la gare elle-même une fois (gardée d’un
+  redémarrage à l’autre). Les deux heures précédentes sont lues en dernier,
+  une fois (un horaire passé ne change pas) et sont facultatives : une erreur
+  sur elles (redemandées 15 minutes plus tard) n’empêche jamais de lire la
+  gare ; seul un train en retard de cette période peut alors manquer.
 - Une requête à la fois au plus, espacées de 1,5 s (40 par minute au plus,
   l’offre gratuite en permet 60). Un redémarrage, une reconnexion, un
   enregistrement du formulaire ou le bouton de test ne font pas venir les
