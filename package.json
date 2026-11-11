@@ -1,6 +1,6 @@
 {
   "name": "gladys-deutsche-bahn",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Deutsche Bahn departures for Gladys Assistant: next departure, delay, cancellations and a departure board, read from the official Timetables API of the DB API Marketplace with your free key. Read-only. Unofficial, not affiliated with Deutsche Bahn.",
   "type": "module",

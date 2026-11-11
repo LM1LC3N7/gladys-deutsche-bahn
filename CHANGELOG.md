@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-11
+
 ### Added
 
 - First version: up to three Deutsche Bahn stations read from the official
@@ -19,3 +21,6 @@ the notes of the version's GitHub Release.
   widget, the "Test the credentials" and "Find a station" buttons. Read-only.
 - At most one request at a time, 40 a minute; pauses after 429/5xx and the
   refused credentials kept across restarts.
+
+[Unreleased]: https://github.com/LM1LC3N7/gladys-deutsche-bahn/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-deutsche-bahn/releases/tag/v0.1.1
