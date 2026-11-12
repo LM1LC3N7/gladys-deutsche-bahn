@@ -46,8 +46,8 @@
 - [ ] Arrivals (only departures today).
 - [ ] Scene triggers (a train cancelled, a delay over a threshold): today a
       scene can use the device values.
-- [ ] `keywords` / `countries` (`DE`) and `gladys_version >= 5.3.0` once
-      Gladys 5.3 is widespread.
+- [ ] `keywords` once Gladys 5.3 is widespread (`countries: ["DE"]` and
+      `gladys_version >= 5.3.0` are declared).
 
 ## Decisions
 
@@ -62,7 +62,7 @@
   in the notices but the CC BY 4.0 attribution of the data.
 - **Read-only v1**: no command, no switch.
 - **SDK `^0.16.0`** (latest on npm on 2026-11-10). Gladys 5.3.2 current;
-  `gladys_version >= 5.1.0` (widgets).
+  `gladys_version >= 5.3.0` (widgets need 5.1.0, `countries` 5.3.0).
 - **Versions**: 0.1.0 set once by hand when leaving the template (package,
   lock file, manifest, image tag `ghcr.io/lm1lc3n7/gladys-deutsche-bahn:0.1.0`);
   the Release workflow owns them from now on.
